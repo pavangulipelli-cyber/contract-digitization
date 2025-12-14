@@ -126,6 +126,20 @@ export default function ContractReview() {
     });
   }, [attributes, searchQuery]);
 
+  const sortedFilteredAttributes = useMemo(() => {
+    const list = [...filteredAttributes];
+    list.sort((a, b) => {
+      const av = a.changedInVersionNumber ?? 1;
+      const bv = b.changedInVersionNumber ?? 1;
+      if (bv !== av) return bv - av;
+      const ac = a.confidenceScore ?? 0;
+      const bc = b.confidenceScore ?? 0;
+      if (bc !== ac) return bc - ac;
+      return (a.name ?? "").localeCompare(b.name ?? "");
+    });
+    return list;
+  }, [filteredAttributes]);
+
   const selectedAttribute = useMemo(() => {
     return attributes.find((attr) => attr.id === selectedAttributeId) || null;
   }, [attributes, selectedAttributeId]);
@@ -408,7 +422,7 @@ export default function ContractReview() {
 
             {/* Attribute List */}
             <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1">
-              {filteredAttributes.map((attr) => (
+              {sortedFilteredAttributes.map((attr) => (
                 <AttributeCard
                   key={attr.id}
                   attribute={attr}
