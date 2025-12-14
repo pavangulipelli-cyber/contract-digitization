@@ -149,8 +149,16 @@ export default function ContractReview() {
     return attributes.filter((attr) => attr.confidenceLevel === "low").length;
   }, [attributes]);
 
-  const latestVersionNumber = versions[0]?.versionNumber ?? contractDoc?.currentVersionNumber ?? 1;
+  const latestVersionNumber = useMemo(() => {
+    return versions[0]?.versionNumber ?? contractDoc?.currentVersionNumber ?? 1;
+  }, [versions, contractDoc]);
+
   const isViewingLatest = (selectedVersionNumber ?? latestVersionNumber) === latestVersionNumber;
+
+  // Helper to compute rowId for latest version
+  const getLatestRowId = (attributeId: string) => {
+    return `${attributeId}--${id}-v${latestVersionNumber}`;
+  };
 
   // Version tab click -> reload attributes/PDF
   const handleVersionClick = async (versionNumber: number) => {
@@ -169,11 +177,17 @@ export default function ContractReview() {
       setAttributes(attrs);
       setActiveVersion(versionMeta);
 
-      const initialValues: Record<string, string> = {};
-      attrs.forEach((attr) => {
-        initialValues[attr.id] = attr.correctedValue || "";
+      // Preserve existing correctedValues (user edits) and only add new ones from this version
+      setCorrectedValues((prev) => {
+        const updated = { ...prev };
+        attrs.forEach((attr) => {
+          // Only set if not already edited by user
+          if (!updated[attr.id]) {
+            updated[attr.id] = attr.correctedValue || "";
+          }
+        });
+        return updated;
       });
-      setCorrectedValues(initialValues);
 
       if (selectedAttributeId) {
         const exists = attrs.find((a) => a.id === selectedAttributeId);
@@ -221,42 +235,44 @@ export default function ContractReview() {
     try {
       console.log("Starting handleSaveReview with id:", id);
       console.log("Current correctedValues:", correctedValues);
-      console.log("Original attributes:", attributes);
+      console.log("Latest version number:", latestVersionNumber);
 
-      // Prepare attributes with corrected values
-      const updatedAttributes = attributes.map((attribute) => {
-        const correctedValue = correctedValues[attribute.id] || attribute.correctedValue;
+      // Always save to latest version - build attributes from correctedValues
+      const attributesToSave = attributes.map((attribute) => {
+        const correctedValue = correctedValues[attribute.id] || attribute.correctedValue || "";
+        const latestRowId = getLatestRowId(attribute.id);
+        
         console.log(`Processing attribute ${attribute.id}:`, {
           correctedValue,
-          originalAttribute: attribute,
+          latestRowId,
+          originalRowId: attribute.rowId,
         });
+        
         return {
-          ...attribute,
+          id: attribute.id,
+          rowId: latestRowId,
           correctedValue,
-          lastModified: new Date().toISOString(),
         };
       });
 
-      console.log("Updated attributes prepared:", updatedAttributes);
-
       const payload = {
         documentId: id,
-        versionNumber: selectedVersionNumber ?? ("latest" as const),
-        attributes: updatedAttributes.map((a) => ({ id: a.id, rowId: a.rowId, correctedValue: a.correctedValue })),
+        versionNumber: latestVersionNumber,
+        attributes: attributesToSave,
         status: "Reviewed" as const,
         reviewedAt: new Date().toISOString(),
       };
 
-      console.log("Payload to be saved:", payload);
+      console.log("Payload to be saved (always to latest):", payload);
 
-      // Save review and update database
+      // Save review to latest version
       await saveReview(id, payload);
 
-      console.log("Review saved successfully");
+      console.log("Review saved successfully to version", latestVersionNumber);
 
       toast({
         title: "Review Saved",
-        description: "Your review and attributes have been saved to the database.",
+        description: `Your review has been saved to the latest version (v${latestVersionNumber}).`,
       });
     } catch (error) {
       console.error("Failed to save review:", error);
@@ -462,6 +478,7 @@ export default function ContractReview() {
                   onCorrectedValueChange={(value) =>
                     setCorrectedValues((prev) => ({ ...prev, [attr.id]: value }))
                   }
+                  saveHint={!isViewingLatest ? `Will be saved to Latest (v${latestVersionNumber})` : undefined}
                 />
               ))}
             </div>

@@ -6,6 +6,7 @@ interface AttributeCardProps {
   onSelect: () => void;
   correctedValue: string;
   onCorrectedValueChange: (value: string) => void;
+  saveHint?: string;
 }
 
 export function AttributeCard({
@@ -14,6 +15,7 @@ export function AttributeCard({
   onSelect,
   correctedValue,
   onCorrectedValueChange,
+  saveHint,
 }: AttributeCardProps) {
   const getConfidenceClass = (level: Attribute["confidenceLevel"]) => {
     switch (level) {
@@ -82,6 +84,11 @@ export function AttributeCard({
           placeholder="Enter corrected value..."
           className="input-field text-sm"
         />
+        {saveHint && correctedValue && (
+          <p className="text-xs text-blue-600 dark:text-blue-400 mt-1 italic">
+            {saveHint}
+          </p>
+        )}
       </div>
     </div>
   );
