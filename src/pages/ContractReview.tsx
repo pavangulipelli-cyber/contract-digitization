@@ -35,6 +35,7 @@ export default function ContractReview() {
   const [correctedValues, setCorrectedValues] = useState<Record<string, string>>({});
   const [isSaving, setIsSaving] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [followLatest, setFollowLatest] = useState(true);
 
 
   useEffect(() => {
@@ -148,10 +149,14 @@ export default function ContractReview() {
     return attributes.filter((attr) => attr.confidenceLevel === "low").length;
   }, [attributes]);
 
+  const latestVersionNumber = versions[0]?.versionNumber ?? contractDoc?.currentVersionNumber ?? 1;
+  const isViewingLatest = (selectedVersionNumber ?? latestVersionNumber) === latestVersionNumber;
+
   // Version tab click -> reload attributes/PDF
   const handleVersionClick = async (versionNumber: number) => {
     if (!id) return;
     if (selectedVersionNumber === versionNumber) return;
+    setFollowLatest(versionNumber === latestVersionNumber);
     setSelectedVersionNumber(versionNumber);
     setIsLoading(true);
     try {
@@ -298,6 +303,31 @@ export default function ContractReview() {
       setIsExporting(false);
     }
   };
+
+  // Poll for new versions every 10s
+  useEffect(() => {
+    if (!id) return;
+    const intervalId = setInterval(async () => {
+      try {
+        const nextVersions = await getDocumentVersions(id);
+        const nextSorted = [...nextVersions].sort((a, b) => b.versionNumber - a.versionNumber);
+        const prevLatest = versions[0]?.versionNumber ?? 1;
+        const nextLatest = nextSorted[0]?.versionNumber ?? 1;
+        
+        setVersions(nextSorted);
+        
+        // If a new latest version arrived and user is following latest
+        if (nextLatest > prevLatest && followLatest && isViewingLatest) {
+          await handleVersionClick(nextLatest);
+          setFollowLatest(true);
+        }
+      } catch (error) {
+        console.warn("[ContractReview] Failed to poll versions", error);
+      }
+    }, 10000);
+    
+    return () => clearInterval(intervalId);
+  }, [id, followLatest, isViewingLatest]);
 
   useEffect(() => {
     console.info("[ContractReview] Search updated", { query: searchQuery });
@@ -451,17 +481,44 @@ export default function ContractReview() {
             </div>
           </div>
 
-          {/* Right Panel: PDF Viewer with version tabs */}
+          {/* Right Panel: PDF Viewer with version scroll bar */}
           <div className="lg:sticky lg:top-8">
+            {/* New version available CTA */}
+            {!followLatest && latestVersionNumber > (selectedVersionNumber ?? 1) && (
+              <div className="mb-3 p-3 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg flex items-center justify-between">
+                <span className="text-sm text-blue-900 dark:text-blue-100">
+                  New version available (v{latestVersionNumber})
+                </span>
+                <button
+                  onClick={() => {
+                    setFollowLatest(true);
+                    handleVersionClick(latestVersionNumber);
+                  }}
+                  className="text-sm px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
+                >
+                  View Latest
+                </button>
+              </div>
+            )}
+            
+            {/* Version scroll bar */}
             {versions.length > 0 && (
-              <div className="flex items-center gap-2 mb-3">
+              <div className="flex gap-2 overflow-x-auto whitespace-nowrap pb-2 mb-3">
                 {versions.map((v) => {
-                  const label = `v${v.versionNumber}${v.isLatest ? " – Latest" : v.versionNumber === 1 ? " – Original" : ""}`;
+                  const label = v.versionNumber === latestVersionNumber
+                    ? `v${v.versionNumber} – Latest`
+                    : v.versionNumber === 1
+                    ? "v1 – Original"
+                    : `v${v.versionNumber}`;
                   const isActive = selectedVersionNumber === v.versionNumber;
                   return (
                     <button
                       key={v.id}
-                      className={`px-3 py-1 rounded text-sm border ${isActive ? "bg-muted border-border" : "bg-card border-border hover:bg-muted"}`}
+                      className={`px-3 py-1 rounded text-sm border flex-shrink-0 transition-colors ${
+                        isActive
+                          ? "bg-muted border-border font-medium"
+                          : "bg-card border-border hover:bg-muted"
+                      }`}
                       onClick={() => handleVersionClick(v.versionNumber)}
                     >
                       {label}
