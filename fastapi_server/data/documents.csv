@@ -1,0 +1,6 @@
+id,title,uploadedAt,status,attributeCount,overallConfidence,reviewedBy,source,storageRef,currentVersionId,currentVersionNumber
+doc-001,"Service Agreement – Acme Corp.pdf",2024-01-15,Reviewed,10,78,web,salesforce,contracts/2024/acme-service-agreement_v3.pdf,doc-001-v13,13
+doc-002,"NDA – TechStart Inc.pdf",2024-01-14,Reviewed,8,92,"Sarah Johnson",conga,contracts/2024/techstart-nda_v3.pdf,doc-002-v3,3
+doc-003,"Master Services Agreement – GlobalTech.pdf",2024-01-13,"Pending Review",6,65,,sftp,contracts/2024/globaltech-msa_v3.pdf,doc-003-v3,3
+doc-004,"Software License – DataFlow Systems.pdf",2024-01-12,Approved,5,95,"Michael Chen",salesforce,contracts/2024/dataflow-license_v3.pdf,doc-004-v3,3
+doc-005,"Consulting Agreement – Innovation Labs.pdf",2024-01-11,"Pending Review",6,72,,conga,contracts/2024/innovation-consulting_v3.pdf,doc-005-v3,3

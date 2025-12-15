@@ -224,18 +224,35 @@ export default function ContractReview() {
       await new Promise(resolve => setTimeout(resolve, 100));
     }
 
-    // Now apply accept all to the current attributes (which are latest)
-    const newValues: Record<string, string> = {};
+    // Calculate how many empty fields will be filled FIRST
+    let filledCount = 0;
     attributes.forEach((attr) => {
-      newValues[attr.id] = attr.extractedValue;
+      const currentValue = (correctedValues[attr.id] || "").trim();
+      if (!currentValue && attr.extractedValue) {
+        filledCount++;
+      }
     });
     
-    console.log("Accept All - new values to be set:", newValues);
-    setCorrectedValues(newValues);
+    console.log("Accept All - filled blanks count:", filledCount);
+    
+    // Now update the state with extracted values
+    setCorrectedValues((prev) => {
+      const updated = { ...prev };
+      attributes.forEach((attr) => {
+        const currentValue = (prev[attr.id] || "").trim();
+        // Only set if current corrected value is empty
+        if (!currentValue && attr.extractedValue) {
+          updated[attr.id] = attr.extractedValue;
+        }
+      });
+      return updated;
+    });
     
     toast({
-      title: "Values Accepted",
-      description: `All extracted values from Latest (v${latestVersionNumber}) have been copied to corrected fields.`,
+      title: filledCount > 0 ? "✅ Values Applied" : "No Changes",
+      description: filledCount > 0 
+        ? `Applied ${filledCount} extracted value${filledCount !== 1 ? 's' : ''} to empty field${filledCount !== 1 ? 's' : ''} (version ${latestVersionNumber}). Click "Save Review" to submit.`
+        : `All fields already have values. No changes were made.`,
     });
   };
 
