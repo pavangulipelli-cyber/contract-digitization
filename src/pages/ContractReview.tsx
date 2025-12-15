@@ -282,8 +282,8 @@ export default function ContractReview() {
       console.log("Review saved successfully to version", latestVersionNumber);
 
       toast({
-        title: "Review Saved",
-        description: `Your review has been saved to the latest version (v${latestVersionNumber}).`,
+        title: "Review Submitted",
+        description: `Review sent to Conga CLM for approval (v${latestVersionNumber}). Pending validation.`,
       });
     } catch (error) {
       console.error("Failed to save review:", error);
