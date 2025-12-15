@@ -210,21 +210,32 @@ export default function ContractReview() {
     }
   };
 
-  const handleAcceptAll = () => {
+  const handleAcceptAll = async () => {
+    console.log("Starting handleAcceptAll", {
+      currentVersion: selectedVersionNumber,
+      latestVersion: latestVersionNumber,
+      isViewingLatest,
+    });
+
+    // If not on latest version, switch to it first
+    if (!isViewingLatest) {
+      await handleVersionClick(latestVersionNumber);
+      // Wait a bit for attributes to load
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+
+    // Now apply accept all to the current attributes (which are latest)
     const newValues: Record<string, string> = {};
-    console.log("Starting handleAcceptAll with attributes:", attributes);
-    
     attributes.forEach((attr) => {
       newValues[attr.id] = attr.extractedValue;
     });
     
-    console.log("New values to be set:", newValues);
+    console.log("Accept All - new values to be set:", newValues);
     setCorrectedValues(newValues);
-    console.log("Corrected values updated:", newValues);
     
     toast({
       title: "Values Accepted",
-      description: "All extracted values have been copied to corrected fields.",
+      description: `All extracted values from Latest (v${latestVersionNumber}) have been copied to corrected fields.`,
     });
   };
 
@@ -485,9 +496,16 @@ export default function ContractReview() {
 
             {/* Actions */}
             <div className="flex flex-col sm:flex-row gap-3 mt-6 pt-6 border-t border-border">
-              <button onClick={handleAcceptAll} className="btn-secondary flex-1">
-                Accept All Extracted Values
-              </button>
+              <div className="flex-1">
+                <button onClick={handleAcceptAll} className="btn-secondary w-full">
+                  Accept All Extracted Values
+                </button>
+                {!isViewingLatest && (
+                  <p className="text-xs text-blue-600 dark:text-blue-400 mt-1 text-center italic">
+                    Applies to Latest (v{latestVersionNumber})
+                  </p>
+                )}
+              </div>
               <button
                 onClick={handleSaveReview}
                 disabled={isSaving}
