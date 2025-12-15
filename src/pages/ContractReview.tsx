@@ -515,7 +515,7 @@ export default function ContractReview() {
             <div className="flex flex-col sm:flex-row gap-3 mt-6 pt-6 border-t border-border">
               <div className="flex-1">
                 <button onClick={handleAcceptAll} className="btn-secondary w-full">
-                  Accept All Extracted Values
+                  Accept Extracted Values for Blank Fields Only
                 </button>
                 {!isViewingLatest && (
                   <p className="text-xs text-blue-600 dark:text-blue-400 mt-1 text-center italic">
