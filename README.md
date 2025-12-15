@@ -1,6 +1,6 @@
 # Contract Digitization Backend
 
-FastAPI server for contract digitization with document versioning support, backed by SQLite database.
+FastAPI server for contract digitization with document versioning support, backed by PostgreSQL database.
 
 ## Features
 
@@ -15,16 +15,24 @@ FastAPI server for contract digitization with document versioning support, backe
 ## Tech Stack
 
 - **Runtime:** Python 3.8+
-- **Framework:** FastAPI
-- **Database:** SQLite3
+- **Framework:** FastAPI 0.116.1+
+- **Database:** PostgreSQL
 - **Port:** 8000 (default)
 - **Features:** Async support, auto-documentation (Swagger UI at `/docs`), CORS enabled
 
 ## Installation
 
-1. **Navigate to FastAPI directory**
+### Prerequisites
+
+- Python 3.8 or higher
+- PostgreSQL server running (localhost:5432 or custom host)
+- PostgreSQL database created (e.g., `contract_ai_postgres_db`)
+
+### Setup Steps
+
+1. **Navigate to FastAPI PostgreSQL directory**
    ```bash
-   cd fastapi_server
+   cd fastapi_server_postgresql
    ```
 
 2. **Install Python dependencies**
@@ -33,12 +41,28 @@ FastAPI server for contract digitization with document versioning support, backe
    ```
    
    Requirements:
-   - fastapi==0.115.0
-   - uvicorn[standard]==0.32.0
-   - pydantic==2.10.0
-   - python-multipart==0.0.12
+   - fastapi>=0.116.1
+   - uvicorn[standard]>=0.35.0
+   - pydantic>=2.11.0,<3.0.0
+   - psycopg2-binary==2.9.9
+   - python-dotenv==1.0.0
+   - python-multipart
 
-3. **Run the server**
+3. **Configure PostgreSQL Connection**
+   
+   Create a `.env` file in the `fastapi_server_postgresql` directory:
+   
+   ```bash
+   DB_HOST=localhost
+   DB_PORT=5432
+   DB_NAME=contract_ai_postgres_db
+   DB_USER=postgres
+   DB_PASSWORD=your_password_here
+   PG_SCHEMA_FILE=data/contract_ai_schema_postgres.sql
+   PG_SEED_FILE=data/contract_ai_seed_postgres.sql
+   ```
+
+4. **Run the server**
    ```bash
    uvicorn main:app --host 0.0.0.0 --port 8000 --reload
    ```
@@ -48,17 +72,18 @@ FastAPI server for contract digitization with document versioning support, backe
    python main.py
    ```
 
-4. **Database Setup** ✨ Automatic!
-   - Database and tables are **automatically created** on first startup
-   - If tables are missing, the database is **automatically seeded**
-   - No manual setup required!
+5. **Database Setup** ✨ Automatic!
+   - Schema is **automatically created** on first startup if tables don't exist
+   - Database is **automatically seeded** with demo data (5 documents, 15 versions, 105 attributes) if empty
+   - No manual SQL scripts required!
+   - Comprehensive logging shows all database operations
 
-5. **Access the API**
+6. **Access the API**
    - API: `http://localhost:8000`
    - Interactive Docs: `http://localhost:8000/docs`
    - Health Check: `http://localhost:8000/health`
 
-6. **Configure Frontend** (Optional)
+7. **Configure Frontend** (Optional)
    
    Create a `.env` file in the project root to connect the React frontend to the FastAPI backend:
    
@@ -78,13 +103,16 @@ FastAPI server for contract digitization with document versioning support, backe
 contract-digitization-backend/
 ├── public/
 │   └── contracts/
-│       └── 2024/              # PDF files stored here
-├── fastapi_server/
-│   ├── main.py                # FastAPI server
-│   ├── requirements.txt       # Python dependencies
+│       └── 2024/                              # PDF files stored here
+├── fastapi_server_postgresql/                 # PostgreSQL Backend
+│   ├── main.py                                # FastAPI server with auto-schema
+│   ├── db_pg.py                               # PostgreSQL connection helpers
+│   ├── requirements.txt                       # Python dependencies
+│   ├── .env                                   # Database credentials (not in git)
+│   ├── .gitignore                             # Protects .env file
 │   └── data/
-│       ├── contract_ai_versioned.db           # SQLite database (auto-created)
-│       └── contract_ai_seed_versioned.sql     # Seed data
+│       ├── contract_ai_schema_postgres.sql    # Database schema
+│       └── contract_ai_seed_postgres.sql      # Demo seed data
 └── README.md
 ```
 
@@ -196,21 +224,58 @@ Navigate to:
 - **Documents:** `http://localhost:8000/api/documents`
 - **Document Details:** `http://localhost:8000/api/documents/doc-001`
 - **PDF File:** `http://localhost:8000/contracts/2024/techstart-nda.pdf`
+### PostgreSQL Backend
 
-## Environment Variables
+Create a `.env` file in `fastapi_server_postgresql/`:
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `PORT` | Server port | `8000` |
-| `DB_FILE` | SQLite database path | `./fastapi_server/data/contract_ai_versioned.db` |
-| `SEED_FILE` | SQL seed file path | `./fastapi_server/data/contract_ai_seed_versioned.sql` |
-| `CONTRACTS_DIR` | PDF storage directory | `../public/contracts` |
+```bash
+DB_HOST=localhost              # PostgreSQL host
+DB_PORT=5432                   # PostgreSQL port
+DB_NAME=contract_ai_postgres_db # Database name
+DB_USER=postgres               # Database user
+DB_PASSWORD=your_password      # Database password
+PG_SCHEMA_FILE=data/contract_ai_schema_postgres.sql
+PG_SEED_FILE=data/contract_ai_seed_postgres.sql
+```PostgreSQL Tables
 
-## Database Schema
+- **documents** - Main document records with metadata
+- **document_versions** - Version history for each document
+- **attributes** - Extracted attributes for each version
+- **attribute_reviews** - Audit trail of attribute corrections
 
-### Tables
+### Key Features
 
-- **documents** - Main document records
+- **Lowercase Column Names**: PostgreSQL stores unquoted identifiers as lowercase
+- **RealDictCursor**: Returns query results as dictionaries for easy JSON serialization
+- **Transactions*_postgresql
+uvicorn main:app --reload --port 8000
+```
+
+### View interactive API documentation
+```bash
+# Open browser to http://localhost:8000/docs
+```
+
+### Resetting the database
+```bash
+# Connect to PostgreSQL and drop/recreate tables
+psql -U postgres -d contract_ai_postgres_db
+
+# In psql:
+DROP SCHEMA public CASCADE;
+CREATE SCHEMA public;
+\q
+
+# Restart FastAPI server - schema and seed data will be auto-created
+```
+
+### Viewing server logs
+The PostgreSQL backend includes comprehensive logging:
+- Request tracking with client IP
+- Query execution details
+- Result counts and sample data
+- Transaction status (BEGIN/COMMIT/ROLLBACK)
+- Banner-formatted output for easy debugging*documents** - Main document records
 - **document_versions** - Version history for each document
 - **attributes** - Extracted attributes for each version
 - **attribute_reviews** - Audit trail of attribute corrections
@@ -232,10 +297,33 @@ uvicorn main:app --reload --port 8000
 ```bash
 cd fastapi_server/data
 rm contract_ai_versioned.db
-# Database will be auto-recreated and seeded on next server start
-```
+# DatabasePostgreSQL schema on startup if tables don't exist
+- Checks if database is empty (document count = 0)
+- Seeds demo data if database is empty:
+  - 5 sample documents (doc-001 to doc-005)
+  - 15 document versions (3 per document)
+  - 105 attributes across all versions
+- Resets sequences to prevent duplicate key errors
+- Logs detailed seeding status with banners and emojis
 
-## Frontend Integration
+### Comprehensive Logging 📊
+Every API endpoint includes:
+- Banner-formatted console output (=== separators)
+- Request tracking with client IP
+- Operation details (document IDs, version numbers, counts)
+- Sample data previews
+- Success confirmations with emoji indicators (📄, 📝, 📋, 💾, ✅)
+- Error details for troubleshooting
+
+Example log output:
+```
+================================================================================
+📄 [PostgreSQL] GET /api/documents - Fetching all documents...
+   Request from: 127.0.0.1
+================================================================================
+✅ [PostgreSQL] Successfully retrieved 5 documents
+================================================================================
+``
 
 To use FastAPI server with the React frontend:
 
