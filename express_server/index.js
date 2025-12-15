@@ -1,4 +1,4 @@
-// server/index.js
+// express_server/index.js
 // Express API server backed by SQLite with document + attribute versioning (tabs support)
 //
 // Works with:

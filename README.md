@@ -1,6 +1,6 @@
 # Contract Digitization Backend
 
-Express.js API server for contract digitization with document versioning support, backed by SQLite database.
+FastAPI server for contract digitization with document versioning support, backed by SQLite database.
 
 ## Features
 
@@ -10,40 +10,67 @@ Express.js API server for contract digitization with document versioning support
 - ✏️ **Review System** - Correct and review extracted attributes
 - 📊 **Export Functionality** - Export attributes to CSV or JSON
 - 📁 **PDF Storage** - Static file serving for contract PDFs
+- 🤖 **Auto-Seeding** - Database automatically created and seeded on startup
 
 ## Tech Stack
 
-- **Runtime:** Node.js
-- **Framework:** Express.js
+- **Runtime:** Python 3.8+
+- **Framework:** FastAPI
 - **Database:** SQLite3
-- **CORS:** Enabled for cross-origin requests
+- **Port:** 8000 (default)
+- **Features:** Async support, auto-documentation (Swagger UI at `/docs`), CORS enabled
 
 ## Installation
 
-1. **Clone the repository**
+1. **Navigate to FastAPI directory**
    ```bash
-   cd contract-digitization-backend/server
+   cd fastapi_server
    ```
 
-2. **Install dependencies**
+2. **Install Python dependencies**
    ```bash
-   npm install
+   pip install -r requirements.txt
    ```
-
-3. **Database Setup**
    
-   The database will be automatically created and seeded on first run. If you need to manually seed:
+   Requirements:
+   - fastapi==0.115.0
+   - uvicorn[standard]==0.32.0
+   - pydantic==2.10.0
+   - python-multipart==0.0.12
+
+3. **Run the server**
    ```bash
-   cd data
-   sqlite3 contract_ai_version.db < contract_ai_seed_versioned.sql
+   uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+   ```
+   
+   Or using Python directly:
+   ```bash
+   python main.py
    ```
 
-4. **Start the server**
-   ```bash
-   node index.js
-   ```
+4. **Database Setup** ✨ Automatic!
+   - Database and tables are **automatically created** on first startup
+   - If tables are missing, the database is **automatically seeded**
+   - No manual setup required!
 
-   Server will start on `http://localhost:5000`
+5. **Access the API**
+   - API: `http://localhost:8000`
+   - Interactive Docs: `http://localhost:8000/docs`
+   - Health Check: `http://localhost:8000/health`
+
+6. **Configure Frontend** (Optional)
+   
+   Create a `.env` file in the project root to connect the React frontend to the FastAPI backend:
+   
+   ```bash
+   # In project root directory
+   echo VITE_API_BASE_URL=http://localhost:8000 > .env
+   ```
+   
+   Or manually create `.env` with:
+   ```
+   VITE_API_BASE_URL=http://localhost:8000
+   ```
 
 ## Project Structure
 
@@ -52,12 +79,12 @@ contract-digitization-backend/
 ├── public/
 │   └── contracts/
 │       └── 2024/              # PDF files stored here
-├── server/
-│   ├── index.js               # Main server file
-│   ├── package.json           # Dependencies
+├── fastapi_server/
+│   ├── main.py                # FastAPI server
+│   ├── requirements.txt       # Python dependencies
 │   └── data/
-│       ├── contract_ai_version.db              # SQLite database
-│       └── contract_ai_seed_versioned.sql      # Seed data
+│       ├── contract_ai_versioned.db           # SQLite database (auto-created)
+│       └── contract_ai_seed_versioned.sql     # Seed data
 └── README.md
 ```
 
@@ -137,20 +164,20 @@ contract-digitization-backend/
 ### Using cURL
 
 ```bash
-# Health check
-curl http://localhost:5000/health
+# Health check (FastAPI)
+curl http://localhost:8000/health
 
 # Get all documents
-curl http://localhost:5000/api/documents
+curl http://localhost:8000/api/documents
 
 # Get document attributes
-curl http://localhost:5000/api/documents/doc-001/attributes
+curl http://localhost:8000/api/documents/doc-001/attributes
 
 # Export as JSON
-curl http://localhost:5000/api/documents/doc-001/attributes/export?format=json
+curl http://localhost:8000/api/documents/doc-001/attributes/export?format=json
 
 # Save review
-curl -X POST http://localhost:5000/api/documents/doc-001/review \
+curl -X POST http://localhost:8000/api/documents/doc-001/review \
   -H "Content-Type: application/json" \
   -d '{
     "reviewedBy": "Jane Smith",
@@ -161,32 +188,23 @@ curl -X POST http://localhost:5000/api/documents/doc-001/review \
   }'
 ```
 
-### Using Postman
-
-1. Import the following collection:
-   - Base URL: `http://localhost:5000`
-   - Set `Content-Type: application/json` for POST requests
-
-2. Test endpoints:
-   - GET requests: Simply add URL and send
-   - POST `/api/documents/:id/review`: Add JSON body as shown above
-
 ### Using Browser (Chrome/Firefox)
 
 Navigate to:
-- `http://localhost:5000/health`
-- `http://localhost:5000/api/documents`
-- `http://localhost:5000/api/documents/doc-001`
-- `http://localhost:5000/contracts/2024/techstart-nda.pdf`
+- **Interactive API Docs:** `http://localhost:8000/docs`
+- **Health Check:** `http://localhost:8000/health`
+- **Documents:** `http://localhost:8000/api/documents`
+- **Document Details:** `http://localhost:8000/api/documents/doc-001`
+- **PDF File:** `http://localhost:8000/contracts/2024/techstart-nda.pdf`
 
 ## Environment Variables
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `PORT` | Server port | `5000` |
-| `DB_FILE` | SQLite database path | `server/data/contract_ai_version.db` |
-| `SEED_FILE` | SQL seed file path | `server/data/contract_ai_seed_versioned.sql` |
-| `CONTRACTS_DIR` | PDF storage directory | `public/contracts` |
+| `PORT` | Server port | `8000` |
+| `DB_FILE` | SQLite database path | `./fastapi_server/data/contract_ai_versioned.db` |
+| `SEED_FILE` | SQL seed file path | `./fastapi_server/data/contract_ai_seed_versioned.sql` |
+| `CONTRACTS_DIR` | PDF storage directory | `../public/contracts` |
 
 ## Database Schema
 
@@ -201,24 +219,52 @@ Navigate to:
 
 ### Starting the server
 ```bash
-cd server
-node index.js
+cd fastapi_server
+uvicorn main:app --reload --port 8000
+```
+
+### View interactive API documentation
+```bash
+# Open browser to http://localhost:8000/docs
 ```
 
 ### Resetting the database
 ```bash
-cd server/data
-rm contract_ai_version.db
-sqlite3 contract_ai_version.db < contract_ai_seed_versioned.sql
+cd fastapi_server/data
+rm contract_ai_versioned.db
+# Database will be auto-recreated and seeded on next server start
 ```
 
+## Frontend Integration
+
+To use FastAPI server with the React frontend:
+
+1. **Update environment variable:**
+   ```bash
+   # In .env file
+   VITE_API_BASE_URL=http://localhost:8000
+   ```
+
+2. **Restart Vite dev server:**
+   ```bash
+   npm run dev
+   ```
+
 ## Features in Detail
+
+### Auto-Seeding ✨
+The FastAPI server automatically:
+- Creates the SQLite database file on startup
+- Checks for required tables (`documents`, `document_versions`, `attributes`)
+- Seeds the database if tables are missing
+- Logs the seeding status: `✅ DB ready: <path> (seeded=true/false)`
 
 ### Version Control
 Each document can have multiple versions, allowing you to:
 - Track changes over time
 - Compare different versions
 - Identify which version an attribute changed in
+- Poll for new versions automatically (frontend feature)
 
 ### Attribute Management
 Attributes include:
@@ -226,12 +272,14 @@ Attributes include:
 - Manually corrected values
 - Metadata (category, section, page)
 - Change tracking across versions
+- Highlighted text from source document
 
 ### Review Workflow
 1. View extracted attributes
 2. Review and correct inaccuracies
 3. Submit corrections via POST request
 4. System tracks who made changes and when
+5. Corrections always save to the latest version
 
 ## License
 
