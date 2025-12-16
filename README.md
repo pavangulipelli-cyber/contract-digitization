@@ -11,6 +11,7 @@ FastAPI server for contract digitization with document versioning support, backe
 - 📊 **Export Functionality** - Export attributes to CSV or JSON
 - 📁 **PDF Storage** - Static file serving for contract PDFs
 - 🤖 **Auto-Seeding** - Database automatically created and seeded on startup
+- 🔗 **Conga CLM Integration** - Automatic postback to Salesforce with mock support
 
 ## Tech Stack
 
@@ -46,6 +47,7 @@ FastAPI server for contract digitization with document versioning support, backe
    - pydantic>=2.11.0,<3.0.0
    - psycopg2-binary==2.9.9
    - python-dotenv==1.0.0
+   - httpx>=0.24.0 (for Conga CLM integration)
    - python-multipart
 
 3. **Configure PostgreSQL Connection**
@@ -106,9 +108,12 @@ contract-digitization-backend/
 │       └── 2024/                              # PDF files stored here
 ├── fastapi_server_postgresql/                 # PostgreSQL Backend
 │   ├── main.py                                # FastAPI server with auto-schema
-│   ├── db_pg.py                               # PostgreSQL connection helpers
+│   ├── conga_client.py                        # Conga CLM integration client
 │   ├── requirements.txt                       # Python dependencies
 │   ├── .env                                   # Database credentials (not in git)
+│   ├── .gitignore                             # Protects .env file
+│   ├── CONGA_INTEGRATION.md                   # Conga setup guide
+│   ├── logs/                                  # Conga mock output filesls (not in git)
 │   ├── .gitignore                             # Protects .env file
 │   └── data/
 │       ├── contract_ai_schema_postgres.sql    # Database schema
@@ -163,9 +168,7 @@ contract-digitization-backend/
   - Example: `/api/documents/doc-001/attributes/export?format=json&version=latest`
 
 ### Review
-
-- **POST** `/api/documents/:id/review`
-  - Save review and update corrected values
+Automatically posts to Conga CLM (Salesforce) in background
   - Request Body:
     ```json
     {
@@ -175,6 +178,23 @@ contract-digitization-backend/
       "attributes": [
         {
           "id": "attr-012",
+          "correctedValue": "Updated Value"
+        }
+      ]
+    }
+    ```
+  - Response includes Conga status:
+    ```json
+    {
+      "success": true,
+      "documentId": "doc-001",
+      "versionId": "ver-001-v3",
+      "versionNumber": 3,
+      "conga": {
+        "queued": true,
+        "enabled": true,
+        "mock": true
+      }   "id": "attr-012",
           "correctedValue": "Updated Value"
         }
       ]
@@ -214,21 +234,7 @@ curl -X POST http://localhost:8000/api/documents/doc-001/review \
       {"id": "attr-012", "correctedValue": "New Value"}
     ]
   }'
-```
-
-### Using Browser (Chrome/Firefox)
-
-Navigate to:
-- **Interactive API Docs:** `http://localhost:8000/docs`
-- **Health Check:** `http://localhost:8000/health`
-- **Documents:** `http://localhost:8000/api/documents`
-- **Document Details:** `http://localhost:8000/api/documents/doc-001`
-- **PDF File:** `http://localhost:8000/contracts/2024/techstart-nda.pdf`
-### PostgreSQL Backend
-
-Create a `.env` file in `fastapi_server_postgresql/`:
-
-```bash
+# PostgreSQL Database Configuration
 DB_HOST=localhost              # PostgreSQL host
 DB_PORT=5432                   # PostgreSQL port
 DB_NAME=contract_ai_postgres_db # Database name
@@ -236,7 +242,17 @@ DB_USER=postgres               # Database user
 DB_PASSWORD=your_password      # Database password
 PG_SCHEMA_FILE=data/contract_ai_schema_postgres.sql
 PG_SEED_FILE=data/contract_ai_seed_postgres.sql
-```PostgreSQL Tables
+
+# Conga CLM (Salesforce) Integration
+CONGA_ENABLED=true             # Enable/disable Conga integration
+CONGA_MOCK=true                # true=mock mode, false=real Salesforce calls
+CONGA_BASE_URL=http://localhost:9999
+CONGA_REVIEW_PATH=/api/review
+CONGA_TIMEOUT_SECONDS=10
+CONGA_API_KEY=                 # Bearer token for production
+## Database Schema
+
+### PostgreSQL Tables
 
 - **documents** - Main document records with metadata
 - **document_versions** - Version history for each document
@@ -247,7 +263,15 @@ PG_SEED_FILE=data/contract_ai_seed_postgres.sql
 
 - **Lowercase Column Names**: PostgreSQL stores unquoted identifiers as lowercase
 - **RealDictCursor**: Returns query results as dictionaries for easy JSON serialization
-- **Transactions*_postgresql
+- **Transactions**: BEGIN/COMMIT/ROLLBACK support for data integrity
+- **Auto-increment**: BIGSERIAL sequences for primary keys
+- **JSON Compatibility**: All responses use camelCase via SQL aliases
+
+## Development
+
+### Starting the server
+```bash
+cd fastapi_server_postgresql
 uvicorn main:app --reload --port 8000
 ```
 
@@ -275,39 +299,22 @@ The PostgreSQL backend includes comprehensive logging:
 - Query execution details
 - Result counts and sample data
 - Transaction status (BEGIN/COMMIT/ROLLBACK)
-- Banner-formatted output for easy debugging*documents** - Main document records
-- **document_versions** - Version history for each document
-- **attributes** - Extracted attributes for each version
-- **attribute_reviews** - Audit trail of attribute corrections
+- Banner-formatted output for easy debugging
 
-## Development
+## Frontend Integration
 
-### Starting the server
-```bash
-cd fastapi_server
-uvicorn main:app --reload --port 8000
-```
+To use FastAPI server with the React frontend:
 
-### View interactive API documentation
-```bash
-# Open browser to http://localhost:8000/docs
-```
+1. **Update environment variable:**
+   ```bash
+   # In .env file
+   VITE_API_BASE_URL=http://localhost:8000
+   ```
 
-### Resetting the database
-```bash
-cd fastapi_server/data
-rm contract_ai_versioned.db
-# DatabasePostgreSQL schema on startup if tables don't exist
-- Checks if database is empty (document count = 0)
-- Seeds demo data if database is empty:
-  - 5 sample documents (doc-001 to doc-005)
-  - 15 document versions (3 per document)
-  - 105 attributes across all versions
-- Resets sequences to prevent duplicate key errors
-- Logs detailed seeding status with banners and emojis
-
-### Comprehensive Logging 📊
-Every API endpoint includes:
+2. **Restart Vite dev server:**
+   ```bash
+   npm run dev
+   ``
 - Banner-formatted console output (=== separators)
 - Request tracking with client IP
 - Operation details (document IDs, version numbers, counts)
@@ -351,7 +358,37 @@ The FastAPI server automatically:
 Each document can have multiple versions, allowing you to:
 - Track changes over time
 - Compare different versions
-- Identify which version an attribute changed in
+- Identify which vers
+
+### Auto-Seeding ✨
+The FastAPI server automatically:
+- Creates PostgreSQL schema on startup if tables don't exist
+- Checks if database is empty (document count = 0)
+- Seeds demo data if database is empty:
+  - 5 sample documents (doc-001 to doc-005)
+  - 15 document versions (3 per document)
+  - 105 attributes across all versions
+- Resets sequences to prevent duplicate key errors
+- Logs detailed seeding status with banners and emojis
+
+### Comprehensive Logging 📊
+Every API endpoint includes:
+- Banner-formatted console output (=== separators)
+- Request tracking with client IP
+- Operation details (document IDs, version numbers, counts)
+- Sample data previews
+- Success confirmations with emoji indicators (📄, 📝, 📋, 💾, ✅)
+- Error details for troubleshooting
+
+Example log output:
+```
+================================================================================
+📄 [PostgreSQL] GET /api/documents - Fetching all documents...
+   Request from: 127.0.0.1
+================================================================================
+✅ [PostgreSQL] Successfully retrieved 5 documents
+================================================================================
+```ion an attribute changed in
 - Poll for new versions automatically (frontend feature)
 
 ### Attribute Management
@@ -372,7 +409,45 @@ Attributes include:
 ## License
 
 MIT
+**PostgreSQL Transaction** - System saves corrections to database (COMMIT)
+5. **Conga CLM Postback** - Background task posts review data to Salesforce (non-blocking)
+6. System tracks who made changes and when
+7. Corrections always save to the latest version
 
-## Support
+### Conga CLM Integration 🔗
+
+The backend integrates with Conga CLM (Salesforce) to automatically post review data after successful database commits.
+
+**Flow:**
+```
+Frontend → POST /review → PostgreSQL Save (COMMIT) → Return Response
+                                  ↓
+                          Background Task: Post to Conga CLM
+```
+
+**Features:**
+- **Mock Mode** - Test without real Salesforce connection (writes to `logs/conga_mock_out.jsonl`)
+- **Non-Blocking** - Uses FastAPI BackgroundTasks so API responses stay fast
+- **Environment-Driven** - All settings in `.env` file
+- **Production-Ready** - Switch from mock to production by updating `.env` only
+
+**Configuration:**
+```bash
+CONGA_ENABLED=true              # Enable/disable feature
+CONGA_MOCK=true                 # Mock mode vs real Salesforce calls
+CONGA_BASE_URL=...              # Conga CLM instance URL
+CONGA_API_KEY=...               # Bearer token for authentication
+```
+
+**Switching to Production:**
+Simply update `.env`:
+```bash
+CONGA_MOCK=false
+CONGA_BASE_URL=https://your-conga-instance.com
+CONGA_API_KEY=your_bearer_token
+```
+No code changes required!
+
+See [CONGA_INTEGRATION.md](fastapi_server_postgresql/CONGA_INTEGRATION.md) for detailed setup and testing guide.
 
 For issues or questions, please contact the development team.
