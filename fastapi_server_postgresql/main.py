@@ -12,7 +12,8 @@ import psycopg2
 import psycopg2.extras
 from pathlib import Path
 from typing import Optional, List, Dict, Any
-from fastapi import FastAPI, HTTPException, Request, Response
+from datetime import datetime
+from fastapi import FastAPI, HTTPException, Request, Response, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -25,6 +26,9 @@ load_dotenv()
 
 # Import PostgreSQL helpers
 from db_pg import get_conn, db_get, db_all, db_run, db_exec
+
+# Import Conga CLM client
+from conga_client import get_conga_client
 
 # =====================
 # CONFIG
@@ -522,7 +526,7 @@ async def export_attributes(
         raise HTTPException(status_code=500, detail="Export failed")
 
 @app.post("/api/documents/{document_id}/review")
-async def save_review(document_id: str, payload: ReviewPayload):
+async def save_review(document_id: str, payload: ReviewPayload, background_tasks: BackgroundTasks):
     conn = None
     try:
         print("\n" + "=" * 80)
@@ -606,11 +610,40 @@ async def save_review(document_id: str, payload: ReviewPayload):
         print(f"   Reviewed by: {payload.reviewedBy}")
         print("=" * 80 + "\n")
         
+        # Build Conga payload
+        conga_payload = {
+            "documentId": document_id,
+            "versionId": version["id"],
+            "versionNumber": version["versionNumber"],
+            "reviewedBy": payload.reviewedBy,
+            "status": payload.status,
+            "attributes": [
+                {
+                    "id": attr.id,
+                    "rowId": attr.rowId or f"{attr.id}--{version['id']}",
+                    "correctedValue": attr.correctedValue
+                }
+                for attr in payload.attributes if attr.id
+            ],
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+        # Get Conga client configuration
+        conga_client = get_conga_client()
+        
+        # Queue Conga postback as background task (non-blocking)
+        background_tasks.add_task(conga_client.post_review, conga_payload)
+        
         return {
             "success": True,
             "documentId": document_id,
             "versionId": version["id"],
-            "versionNumber": version["versionNumber"]
+            "versionNumber": version["versionNumber"],
+            "conga": {
+                "queued": True,
+                "enabled": conga_client.enabled,
+                "mock": conga_client.mock
+            }
         }
     except HTTPException:
         if conn:
