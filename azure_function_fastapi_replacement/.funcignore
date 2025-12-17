@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+.git/
+.gitignore
+.vscode/
+__azurite_db*__.json
+test-results/
+.coverage
+*.cover
+.pytest_cache/
+*.log

@@ -124,23 +124,27 @@ export async function getAttributesByDocumentId(
 }
 
 export interface SaveReviewPayload {
-  documentId: string;
-  versionNumber: number | "latest";
-  attributes: Array<{
-    id: string;
-    rowId?: string;
-    correctedValue: string;
-  }>;
+  corrections: Record<string, string>; // attributeKey -> correctedValue
+  reviewerName?: string;
   status: "Reviewed" | "Approved";
+  reviewedAt?: string;
+}
+
+export interface SaveReviewResponse {
+  ok: boolean;
+  versionNumber: number;
+  versionId: string;
+  updatedCount: number;
+  updatedKeys?: string[];
 }
 
 export async function saveReview(
   docId: string,
   payload: SaveReviewPayload
-): Promise<{ success: boolean }> {
+): Promise<SaveReviewResponse> {
   if (!USE_MOCKS) {
     try {
-      return await apiRequest<{ success: boolean }>(`/api/documents/${docId}/review`, {
+      return await apiRequest<SaveReviewResponse>(`/api/documents/${docId}/review`, {
         method: "POST",
         body: JSON.stringify(payload),
       });
@@ -152,7 +156,13 @@ export async function saveReview(
   // Mock fallback
   await delay(500);
   console.log("Review saved:", { docId, payload });
-  return { success: true };
+  return { 
+    ok: true, 
+    versionNumber: 1, 
+    versionId: `ver-${docId}-v1`,
+    updatedCount: Object.keys(payload.corrections).length,
+    updatedKeys: Object.keys(payload.corrections)
+  };
 }
 
 // Bulk operations

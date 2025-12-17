@@ -40,6 +40,7 @@ export interface Attribute {
   rowId?: string;
   versionId?: string;
   changedInVersionNumber?: number;
+  attributeKey: string; // Stable identifier across versions
 }
 
 export interface User {

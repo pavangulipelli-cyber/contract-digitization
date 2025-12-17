@@ -31,8 +31,10 @@ export default function ContractReview() {
   const [attributes, setAttributes] = useState<Attribute[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedAttributeId, setSelectedAttributeId] = useState<string | null>(null);
+  const [selectedAttributeKey, setSelectedAttributeKey] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [correctedValues, setCorrectedValues] = useState<Record<string, string>>({});
+  const [originalValues, setOriginalValues] = useState<Record<string, string>>({});
   const [isSaving, setIsSaving] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [followLatest, setFollowLatest] = useState(true);
@@ -90,18 +92,21 @@ export default function ContractReview() {
           selectedVersion: defaultVersion,
         });
 
-        // Initialize corrected values
+        // Initialize corrected values by attributeKey (stable across versions)
         const initialValues: Record<string, string> = {};
         attrs.forEach((attr) => {
-          initialValues[attr.id] = attr.correctedValue || "";
+          initialValues[attr.attributeKey] = attr.correctedValue || "";
         });
         setCorrectedValues(initialValues);
+        setOriginalValues(initialValues); // Track original values
 
         // Select first attribute by default
         if (attrs.length > 0) {
           setSelectedAttributeId(attrs[0].id);
+          setSelectedAttributeKey(attrs[0].attributeKey);
           console.info("[ContractReview] Default attribute selected", {
             attributeId: attrs[0].id,
+            attributeKey: attrs[0].attributeKey,
           });
         }
       } catch (error) {
@@ -117,6 +122,27 @@ export default function ContractReview() {
     }
     fetchData();
   }, [id, navigate]);
+
+  const lowConfidenceCount = useMemo(() => {
+    return attributes.filter((attr) => attr.confidenceLevel === "low").length;
+  }, [attributes]);
+
+  const latestVersionNumber = useMemo(() => {
+    return versions[0]?.versionNumber ?? contractDoc?.currentVersionNumber ?? 1;
+  }, [versions, contractDoc]);
+
+  const isViewingLatest = (selectedVersionNumber ?? latestVersionNumber) === latestVersionNumber;
+
+  // Track which attributes have unsaved changes (dirty)
+  const isDirtyMap = useMemo(() => {
+    const map: Record<string, boolean> = {};
+    attributes.forEach((attr) => {
+      const currentValue = correctedValues[attr.attributeKey] || "";
+      const originalValue = originalValues[attr.attributeKey] || "";
+      map[attr.attributeKey] = currentValue !== originalValue;
+    });
+    return map;
+  }, [attributes, correctedValues, originalValues]);
 
   const filteredAttributes = useMemo(() => {
     return attributes.filter((attr) => {
@@ -147,6 +173,16 @@ export default function ContractReview() {
     return attributes.find((attr) => attr.id === selectedAttributeId) || null;
   }, [attributes, selectedAttributeId]);
 
+  // Sync selectedAttributeId when attributes load (find by attributeKey)
+  useEffect(() => {
+    if (selectedAttributeKey && attributes.length > 0) {
+      const foundAttr = attributes.find(a => a.attributeKey === selectedAttributeKey);
+      if (foundAttr && foundAttr.id !== selectedAttributeId) {
+        setSelectedAttributeId(foundAttr.id);
+      }
+    }
+  }, [attributes, selectedAttributeKey]);
+
   // Update bounding box and PDF page when selected attribute changes
   useEffect(() => {
     if (selectedAttribute) {
@@ -164,21 +200,6 @@ export default function ContractReview() {
       setCurrentPdfPage(1);
     }
   }, [selectedAttribute]);
-
-  const lowConfidenceCount = useMemo(() => {
-    return attributes.filter((attr) => attr.confidenceLevel === "low").length;
-  }, [attributes]);
-
-  const latestVersionNumber = useMemo(() => {
-    return versions[0]?.versionNumber ?? contractDoc?.currentVersionNumber ?? 1;
-  }, [versions, contractDoc]);
-
-  const isViewingLatest = (selectedVersionNumber ?? latestVersionNumber) === latestVersionNumber;
-
-  // Helper to compute rowId for latest version
-  const getLatestRowId = (attributeId: string) => {
-    return `${attributeId}--${id}-v${latestVersionNumber}`;
-  };
 
   // Version tab click -> reload attributes/PDF
   const handleVersionClick = async (versionNumber: number) => {
@@ -201,20 +222,22 @@ export default function ContractReview() {
       setCorrectedValues((prev) => {
         const updated = { ...prev };
         attrs.forEach((attr) => {
-          // Only set if not already edited by user
-          if (!updated[attr.id]) {
-            updated[attr.id] = attr.correctedValue || "";
+          // Only set if not already edited by user (keyed by attributeKey)
+          if (!updated[attr.attributeKey]) {
+            updated[attr.attributeKey] = attr.correctedValue || "";
           }
         });
         return updated;
       });
+      
+      // Update original values for new version
+      const versionOriginals: Record<string, string> = {};
+      attrs.forEach((attr) => {
+        versionOriginals[attr.attributeKey] = attr.correctedValue || "";
+      });
+      setOriginalValues((prev) => ({ ...prev, ...versionOriginals }));
 
-      if (selectedAttributeId) {
-        const exists = attrs.find((a) => a.id === selectedAttributeId);
-        if (!exists && attrs.length) {
-          setSelectedAttributeId(attrs[0].id);
-        }
-      }
+      // Selection will be handled by the sync effect using selectedAttributeKey
     } finally {
       setIsLoading(false);
     }
@@ -222,10 +245,15 @@ export default function ContractReview() {
 
   // Attribute click -> jump to the version where it changed
   const handleAttributeClick = async (attr: Attribute) => {
-    setSelectedAttributeId(attr.id);
+    // Always update selectedAttributeKey for stable selection
+    setSelectedAttributeKey(attr.attributeKey);
+    
     const target = attr.changedInVersionNumber ?? selectedVersionNumber ?? 1;
     if (target !== selectedVersionNumber) {
+      // Navigate to target version (selection will sync via effect)
       await handleVersionClick(target);
+    } else {
+      // Same version, just select it
       setSelectedAttributeId(attr.id);
     }
   };
@@ -247,7 +275,7 @@ export default function ContractReview() {
     // Calculate how many empty fields will be filled FIRST
     let filledCount = 0;
     attributes.forEach((attr) => {
-      const currentValue = (correctedValues[attr.id] || "").trim();
+      const currentValue = (correctedValues[attr.attributeKey] || "").trim();
       if (!currentValue && attr.extractedValue) {
         filledCount++;
       }
@@ -259,10 +287,10 @@ export default function ContractReview() {
     setCorrectedValues((prev) => {
       const updated = { ...prev };
       attributes.forEach((attr) => {
-        const currentValue = (prev[attr.id] || "").trim();
+        const currentValue = (prev[attr.attributeKey] || "").trim();
         // Only set if current corrected value is empty
         if (!currentValue && attr.extractedValue) {
-          updated[attr.id] = attr.extractedValue;
+          updated[attr.attributeKey] = attr.extractedValue;
         }
       });
       return updated;
@@ -283,44 +311,63 @@ export default function ContractReview() {
     try {
       console.log("Starting handleSaveReview with id:", id);
       console.log("Current correctedValues:", correctedValues);
+      console.log("Original values:", originalValues);
       console.log("Latest version number:", latestVersionNumber);
 
-      // Always save to latest version - build attributes from correctedValues
-      const attributesToSave = attributes.map((attribute) => {
-        const correctedValue = correctedValues[attribute.id] || attribute.correctedValue || "";
-        const latestRowId = getLatestRowId(attribute.id);
+      // Build corrections object - ONLY include attributes that were actually modified
+      const corrections: Record<string, string> = {};
+      attributes.forEach((attr) => {
+        const currentValue = correctedValues[attr.attributeKey] || "";
+        const originalValue = originalValues[attr.attributeKey] || "";
         
-        console.log(`Processing attribute ${attribute.id}:`, {
-          correctedValue,
-          latestRowId,
-          originalRowId: attribute.rowId,
-        });
-        
-        return {
-          id: attribute.id,
-          rowId: latestRowId,
-          correctedValue,
-        };
+        // Only include if value has changed
+        if (currentValue !== originalValue) {
+          corrections[attr.attributeKey] = currentValue;
+        }
       });
+      
+      console.log("Modified attributes to save:", Object.keys(corrections).length);
+      console.log("Corrections payload:", corrections);
+      
+      // Don't send if nothing changed
+      if (Object.keys(corrections).length === 0) {
+        toast({
+          title: "No Changes",
+          description: "No attributes were modified.",
+        });
+        setIsSaving(false);
+        return;
+      }
 
       const payload = {
-        documentId: id,
-        versionNumber: latestVersionNumber,
-        attributes: attributesToSave,
+        corrections,
+        reviewerName: "unknown",
         status: "Reviewed" as const,
         reviewedAt: new Date().toISOString(),
       };
 
-      console.log("Payload to be saved (always to latest):", payload);
+      console.log("Payload to be saved (by attributeKey):", payload);
 
-      // Save review to latest version
-      await saveReview(id, payload);
+      // Save review - always updates latest version (backend handles this)
+      const result = await saveReview(id, payload);
 
-      console.log("Review saved successfully to version", latestVersionNumber);
+      console.log("Review saved successfully:", result);
+
+      // Update originalValues for saved keys to reflect persisted state
+      const updatedOriginals = { ...originalValues };
+      Object.keys(corrections).forEach((key) => {
+        updatedOriginals[key] = correctedValues[key];
+      });
+      setOriginalValues(updatedOriginals);
+
+      // Reload current view to get updated changedInVersionNumber from DB
+      const attrResp = await getAttributesByDocumentId(id, selectedVersionNumber || latestVersionNumber);
+      const updatedAttrs = Array.isArray(attrResp) ? attrResp : attrResp?.attributes || [];
+      setAttributes(updatedAttrs);
 
       toast({
         title: "Review Submitted",
-        description: `Review sent to Conga CLM for approval (v${latestVersionNumber}). Pending validation.`,
+        description: `Review sent to Conga CLM for approval (v${result.versionNumber}). ${result.updatedCount} attribute(s) updated.`,
       });
     } catch (error) {
       console.error("Failed to save review:", error);
@@ -398,10 +445,13 @@ export default function ContractReview() {
   }, [searchQuery]);
 
   useEffect(() => {
-    if (selectedAttributeId) {
-      console.info("[ContractReview] Attribute selected", { attributeId: selectedAttributeId });
+    if (selectedAttributeId && selectedAttributeKey) {
+      console.info("[ContractReview] Attribute selected", { 
+        attributeId: selectedAttributeId,
+        attributeKey: selectedAttributeKey 
+      });
     }
-  }, [selectedAttributeId]);
+  }, [selectedAttributeId, selectedAttributeKey]);
 
   // Get PDF URL from active version
   const pdfUrl = activeVersion?.storageUrl || (activeVersion?.storageRef ? getPdfUrl(activeVersion.storageRef) : undefined);
@@ -522,11 +572,13 @@ export default function ContractReview() {
                   attribute={attr}
                   isSelected={selectedAttributeId === attr.id}
                   onSelect={() => handleAttributeClick(attr)}
-                  correctedValue={correctedValues[attr.id] || ""}
+                  correctedValue={correctedValues[attr.attributeKey] || ""}
                   onCorrectedValueChange={(value) =>
-                    setCorrectedValues((prev) => ({ ...prev, [attr.id]: value }))
+                    setCorrectedValues((prev) => ({ ...prev, [attr.attributeKey]: value }))
                   }
                   saveHint={!isViewingLatest ? `Will be saved to Latest (v${latestVersionNumber})` : undefined}
+                  isDirty={isDirtyMap[attr.attributeKey] || false}
+                  latestVersionNumber={latestVersionNumber}
                 />
               ))}
             </div>

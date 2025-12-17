@@ -7,6 +7,8 @@ interface AttributeCardProps {
   correctedValue: string;
   onCorrectedValueChange: (value: string) => void;
   saveHint?: string;
+  isDirty?: boolean;
+  latestVersionNumber?: number;
 }
 
 export function AttributeCard({
@@ -16,6 +18,8 @@ export function AttributeCard({
   correctedValue,
   onCorrectedValueChange,
   saveHint,
+  isDirty,
+  latestVersionNumber,
 }: AttributeCardProps) {
   const getConfidenceClass = (level: Attribute["confidenceLevel"]) => {
     switch (level) {
@@ -41,12 +45,17 @@ export function AttributeCard({
       {/* Header */}
       <div className="flex items-start justify-between gap-2 mb-2">
         <h4 className="font-medium text-foreground text-sm">{attribute.name}</h4>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 flex-wrap justify-end">
           {attribute.changedInVersionNumber ? (
             <span className="status-pill text-xs flex-shrink-0">
               Changed in v{attribute.changedInVersionNumber}
             </span>
           ) : null}
+          {isDirty && latestVersionNumber && (
+            <span className="status-pill text-xs flex-shrink-0 bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200">
+              Pending v{latestVersionNumber}
+            </span>
+          )}
           <span className={`status-pill text-xs flex-shrink-0 ${getConfidenceClass(attribute.confidenceLevel)}`}>
             {getConfidenceLabel(attribute.confidenceLevel, attribute.confidenceScore)}
           </span>

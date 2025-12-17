@@ -10,3 +10,4 @@ If your Function uses authLevel: "function", you may also add:
 
 # If using function keys:
 # VITE_FUNCTION_KEY=<your-function-key>
+
