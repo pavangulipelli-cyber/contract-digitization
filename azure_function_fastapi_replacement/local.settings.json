@@ -1,0 +1,23 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "FUNCTIONS_WORKER_RUNTIME": "python",
+
+    "DB_HOST": "localhost",
+    "DB_PORT": "5432",
+    "DB_NAME": "contract_ai",
+    "DB_USER": "postgres",
+    "DB_PASSWORD": "your_password",
+
+    "CORS_ALLOW_ORIGIN": "http://localhost:5173",
+
+    "CONGA_ENABLED": "false",
+    "CONGA_MOCK": "true",
+    "CONGA_BASE_URL": "https://your-conga-host",
+    "CONGA_REVIEW_PATH": "/api/review",
+    "CONGA_TIMEOUT_SECONDS": "30",
+
+    "AUTO_INIT_DB": "false"
+  }
+}

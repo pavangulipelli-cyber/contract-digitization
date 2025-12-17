@@ -1,0 +1,12 @@
+# Local Functions:
+# VITE_API_BASE_URL=http://localhost:7071
+
+# Azure:
+# VITE_API_BASE_URL=https://<your-func-app>.azurewebsites.net
+
+VITE_API_BASE_URL=http://localhost:7071
+
+If your Function uses authLevel: "function", you may also add:
+
+# If using function keys:
+# VITE_FUNCTION_KEY=<your-function-key>
