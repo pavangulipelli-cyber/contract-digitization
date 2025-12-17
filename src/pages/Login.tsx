@@ -46,24 +46,27 @@ export default function Login() {
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="w-full max-w-md animate-fade-in">
-        <div className="bg-card rounded-xl card-shadow-lg p-8">
-          {/* Logo/Icon */}
-          <div className="flex justify-center mb-6">
-            <div className="w-16 h-16 bg-primary rounded-xl flex items-center justify-center">
-              <ShieldIcon className="w-8 h-8 text-primary-foreground" />
+        <div className="bg-card rounded-lg border border-border shadow-md p-8">
+          {/* McKesson Logo */}
+          <div className="flex flex-col items-center mb-8">
+            <div className="mb-4">
+              <h1 className="text-4xl font-heading font-bold tracking-tight">
+                <span className="text-primary">MCKESSON</span>
+              </h1>
+              <div className="h-1 w-16 bg-secondary mt-1 mx-auto"></div>
             </div>
           </div>
           
           {/* Title */}
-          <h1 className="text-2xl font-semibold text-foreground text-center mb-2">
+          <h2 className="text-xl font-heading font-semibold text-foreground text-center mb-2">
             Contract AI Review Portal
-          </h1>
-          <p className="text-muted-foreground text-center mb-8">
+          </h2>
+          <p className="text-muted-foreground text-center mb-6 text-sm">
             Sign in to access your dashboard
           </p>
           
           {/* Form */}
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-3">
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-foreground mb-1.5">
                 Email
@@ -105,14 +108,14 @@ export default function Login() {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full btn-primary py-2.5 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full btn-primary py-2.5 disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:shadow-lg"
             >
               {isLoading ? "Signing in..." : "Login"}
             </button>
           </form>
           
           {/* Demo hint */}
-          <p className="text-xs text-muted-foreground text-center mt-6">
+          <p className="text-xs text-muted-foreground text-center mt-4">
             Demo: admin@contract.ai / password123
           </p>
         </div>

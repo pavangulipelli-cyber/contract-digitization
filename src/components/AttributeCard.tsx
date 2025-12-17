@@ -39,9 +39,9 @@ export function AttributeCard({
       className={`attribute-card ${isSelected ? "attribute-card-selected" : ""}`}
     >
       {/* Header */}
-      <div className="flex items-start justify-between gap-2 mb-3">
-        <h4 className="font-medium text-foreground">{attribute.name}</h4>
-        <div className="flex items-center gap-2">
+      <div className="flex items-start justify-between gap-2 mb-2">
+        <h4 className="font-medium text-foreground text-sm">{attribute.name}</h4>
+        <div className="flex items-center gap-1">
           {attribute.changedInVersionNumber ? (
             <span className="status-pill text-xs flex-shrink-0">
               Changed in v{attribute.changedInVersionNumber}
@@ -54,16 +54,16 @@ export function AttributeCard({
       </div>
       
       {/* Section info */}
-      <p className="text-xs text-muted-foreground mb-4">
+      <p className="text-xs text-muted-foreground mb-3 leading-tight">
         Section: {attribute.section} – {attribute.category}
       </p>
       
       {/* Extracted Value */}
-      <div className="mb-3">
+      <div className="mb-2">
         <label className="block text-xs font-medium text-muted-foreground mb-1">
           Extracted Value
         </label>
-        <div className="px-3 py-2 bg-muted rounded-lg text-sm text-foreground">
+        <div className="px-3 py-2 bg-muted rounded-lg text-sm text-foreground leading-tight">
           {attribute.extractedValue}
         </div>
       </div>
@@ -85,7 +85,7 @@ export function AttributeCard({
           className="input-field text-sm"
         />
         {saveHint && correctedValue && (
-          <p className="text-xs text-blue-600 dark:text-blue-400 mt-1 italic">
+          <p className="text-xs text-primary mt-1 italic">
             {saveHint}
           </p>
         )}

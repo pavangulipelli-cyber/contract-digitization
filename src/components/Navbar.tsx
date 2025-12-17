@@ -16,12 +16,21 @@ export function Navbar({ title }: NavbarProps) {
   };
 
   return (
-    <nav className="bg-card border-b border-border">
+    <nav className="bg-card border-b border-border shadow-sm">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16">
-          <h1 className="text-lg font-semibold text-foreground">{title}</h1>
-          
+        <div className="flex items-center justify-between h-14">
           <div className="flex items-center gap-4">
+            <button
+              onClick={() => navigate("/documents")}
+              className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+            >
+              <span className="text-lg font-heading font-bold text-primary">MCKESSON</span>
+              <div className="hidden sm:block h-4 w-px bg-border"></div>
+            </button>
+            <h1 className="text-sm font-heading font-semibold text-foreground hidden sm:block">{title}</h1>
+          </div>
+          
+          <div className="flex items-center gap-3">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <UserIcon className="w-4 h-4" />
               <span className="hidden sm:inline">{user?.name}</span>
@@ -29,7 +38,7 @@ export function Navbar({ title }: NavbarProps) {
             
             <button
               onClick={handleLogout}
-              className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors"
+              className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-muted-foreground hover:text-primary hover:bg-muted/50 rounded-lg transition-all"
             >
               <LogOutIcon className="w-4 h-4" />
               <span className="hidden sm:inline">Logout</span>

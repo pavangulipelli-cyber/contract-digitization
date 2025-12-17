@@ -34,7 +34,7 @@ from conga_client import get_conga_client
 # CONFIG
 # =====================
 PORT = int(os.getenv("PORT", "8000"))
-PG_SCHEMA_FILE = os.getenv("PG_SCHEMA_FILE") or str(Path(__file__).parent / "data" / "contract_ai_schema_postgres.sql")
+PG_SCHEMA_FILE = os.getenv("PG_SCHEMA_FILE") or str(Path(__file__).parent / "data" / "contract_ai_schema_postgres_redesigned.sql")
 CONTRACTS_DIR = os.getenv("CONTRACTS_DIR") or str(Path(__file__).parent.parent / "public" / "contracts")
 
 app = FastAPI()
@@ -73,11 +73,11 @@ async def ensure_schema():
             SELECT table_name 
             FROM information_schema.tables 
             WHERE table_schema = 'public' 
-            AND table_name IN ('documents', 'document_versions', 'attributes')
+            AND table_name IN ('documents', 'document_versions', 'extracted_fields')
         """)
         
         existing_tables = {row['table_name'] for row in cursor.fetchall()}
-        required_tables = {'documents', 'document_versions', 'attributes'}
+        required_tables = {'documents', 'document_versions', 'extracted_fields'}
         missing_tables = required_tables - existing_tables
         
         print(f"📊 Existing tables: {sorted(existing_tables) if existing_tables else 'None'}")
@@ -101,7 +101,7 @@ async def ensure_schema():
             print(f"✅ Schema created successfully")
         
         # Check if data needs to be seeded
-        seed_file = os.getenv("PG_SEED_FILE", "./data/contract_ai_seed_postgres.sql")
+        seed_file = os.getenv("PG_SEED_FILE", "./data/contract_ai_seed_postgres_redesigned_updated.sql")
         if existing_tables:
             cursor.execute("SELECT COUNT(*) as count FROM documents")
             doc_count = cursor.fetchone()['count']
@@ -172,12 +172,12 @@ async def compute_changed_in_version_number(document_id: str) -> Dict[str, Any]:
     
     rows = db_all(
         """
-        SELECT dv.versionnumber AS "versionNumber", a.attributekey AS "attributeKey", 
-               a.extractedvalue AS "extractedValue", a.correctedvalue AS "correctedValue"
-        FROM attributes a
-        JOIN document_versions dv ON dv.id = a.versionid
-        WHERE a.documentid = %s AND dv.versionnumber <= %s
-        ORDER BY a.attributekey ASC, dv.versionnumber ASC
+        SELECT dv.versionnumber AS "versionNumber", ef.attribute_key AS "attributeKey", 
+               ef.field_value AS "extractedValue", ef.corrected_value AS "correctedValue"
+        FROM extracted_fields ef
+        JOIN document_versions dv ON dv.id = ef.version_id
+        WHERE ef.document_id = %s AND dv.versionnumber <= %s
+        ORDER BY ef.attribute_key ASC, dv.versionnumber ASC
         """,
         (document_id, up_to)
     )
@@ -373,22 +373,23 @@ async def get_attributes(
         rows = db_all(
             """
             SELECT
-                id AS "rowId",
-                attributekey AS id,
-                documentid AS "documentId",
-                versionid AS "versionId",
-                name,
+                row_id AS "rowId",
+                attribute_key AS id,
+                document_id AS "documentId",
+                version_id AS "versionId",
+                field_name AS name,
                 category,
                 section,
-                page,
-                confidencescore AS "confidenceScore",
-                confidencelevel AS "confidenceLevel",
-                extractedvalue AS "extractedValue",
-                correctedvalue AS "correctedValue",
-                highlightedtext AS "highlightedText"
-            FROM attributes
-            WHERE documentid = %s AND versionid = %s
-            ORDER BY attributekey
+                page_number AS page,
+                confidence_score AS "confidenceScore",
+                confidence_level AS "confidenceLevel",
+                field_value AS "extractedValue",
+                corrected_value AS "correctedValue",
+                highlighted_text AS "highlightedText",
+                bounding_box AS "boundingBox"
+            FROM extracted_fields
+            WHERE document_id = %s AND version_id = %s
+            ORDER BY attribute_key
             """,
             (document_id, requested_version["id"])
         )
@@ -458,18 +459,18 @@ async def export_attributes(
         rows = db_all(
             """
             SELECT
-                attributekey AS id,
-                name,
+                attribute_key AS id,
+                field_name AS name,
                 category,
                 section,
-                page,
-                confidencescore AS "confidenceScore",
-                confidencelevel AS "confidenceLevel",
-                extractedvalue AS "extractedValue",
-                correctedvalue AS "correctedValue"
-            FROM attributes
-            WHERE documentid = %s AND versionid = %s
-            ORDER BY attributekey
+                page_number AS page,
+                confidence_score AS "confidenceScore",
+                confidence_level AS "confidenceLevel",
+                field_value AS "extractedValue",
+                corrected_value AS "correctedValue"
+            FROM extracted_fields
+            WHERE document_id = %s AND version_id = %s
+            ORDER BY attribute_key
             """,
             (document_id, doc_version["id"])
         )
@@ -558,6 +559,22 @@ async def save_review(document_id: str, payload: ReviewPayload, background_tasks
         cursor = conn.cursor()
         cursor.execute("BEGIN")
         
+        # Create review session
+        cursor.execute(
+            """
+            INSERT INTO review_sessions 
+            (document_id, target_version_id, reviewer, status, created_at, updated_at)
+            VALUES (%s, %s, %s, 'COMPLETED', NOW(), NOW())
+            RETURNING review_id
+            """,
+            (document_id, version["id"], payload.reviewedBy)
+        )
+        review_session = cursor.fetchone()
+        review_id = review_session["review_id"] if review_session else None
+        
+        print(f"   ✅ Created review session: {review_id}")
+        
+        # Update each attribute and create audit trail
         for attr in payload.attributes:
             if not attr.id:
                 continue
@@ -565,31 +582,45 @@ async def save_review(document_id: str, payload: ReviewPayload, background_tasks
             attribute_key = attr.id
             row_id = attr.rowId or f"{attribute_key}--{version['id']}"
             
-            # Get existing correctedValue
+            # Get existing correctedValue from extracted_fields
             cursor.execute(
-                "SELECT correctedvalue AS \"correctedValue\" FROM attributes WHERE id = %s AND versionid = %s",
+                "SELECT corrected_value FROM extracted_fields WHERE row_id = %s AND version_id = %s",
                 (row_id, version["id"])
             )
             existing = cursor.fetchone()
+            old_corrected_value = existing["corrected_value"] if existing else None
             
-            # Update correctedValue
+            # Get original field_value for audit trail
             cursor.execute(
-                "UPDATE attributes SET correctedvalue = %s WHERE id = %s AND versionid = %s",
+                "SELECT field_value FROM extracted_fields WHERE row_id = %s AND version_id = %s",
+                (row_id, version["id"])
+            )
+            original = cursor.fetchone()
+            original_value = original["field_value"] if original else None
+            
+            # Update correctedValue in extracted_fields
+            cursor.execute(
+                "UPDATE extracted_fields SET corrected_value = %s WHERE row_id = %s AND version_id = %s",
                 (attr.correctedValue, row_id, version["id"])
             )
             
-            # Insert review record
+            # Insert into reviewed_fields for audit trail
             cursor.execute(
                 """
-                INSERT INTO attribute_reviews 
-                (documentid, versionid, attributekey, oldcorrectedvalue, newcorrectedvalue, reviewedby, reviewedat)
-                VALUES (%s, %s, %s, %s, %s, %s, NOW())
+                INSERT INTO reviewed_fields 
+                (review_id, document_id, target_version_id, attribute_key, 
+                 original_value, old_corrected_value, new_corrected_value, corrected_value,
+                 approved, reviewed_by, reviewed_at, updated_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, TRUE, %s, NOW(), NOW())
                 """,
                 (
+                    review_id,
                     document_id,
                     version["id"],
                     attribute_key,
-                    existing["correctedValue"] if existing else None,
+                    original_value,
+                    old_corrected_value,
+                    attr.correctedValue,
                     attr.correctedValue,
                     payload.reviewedBy
                 )
@@ -604,10 +635,12 @@ async def save_review(document_id: str, payload: ReviewPayload, background_tasks
         conn.commit()
         
         print(f"\n✅ [PostgreSQL] Review saved successfully!")
+        print(f"   Review Session: {review_id}")
         print(f"   Document: {document_id}")
         print(f"   Version: {version['versionNumber']}")
         print(f"   Status: {payload.status}")
         print(f"   Reviewed by: {payload.reviewedBy}")
+        print(f"   Fields updated: {len(payload.attributes)}")
         print("=" * 80 + "\n")
         
         # Build Conga payload
@@ -617,6 +650,7 @@ async def save_review(document_id: str, payload: ReviewPayload, background_tasks
             "versionNumber": version["versionNumber"],
             "reviewedBy": payload.reviewedBy,
             "status": payload.status,
+            "reviewSessionId": str(review_id) if review_id else None,
             "attributes": [
                 {
                     "id": attr.id,
@@ -639,6 +673,8 @@ async def save_review(document_id: str, payload: ReviewPayload, background_tasks
             "documentId": document_id,
             "versionId": version["id"],
             "versionNumber": version["versionNumber"],
+            "reviewSessionId": str(review_id) if review_id else None,
+            "fieldsUpdated": len(payload.attributes),
             "conga": {
                 "queued": True,
                 "enabled": conga_client.enabled,
@@ -653,6 +689,8 @@ async def save_review(document_id: str, payload: ReviewPayload, background_tasks
         if conn:
             conn.rollback()
         print(f"❌ [PostgreSQL] Error saving review: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail="Failed to save review")
     finally:
         if conn:

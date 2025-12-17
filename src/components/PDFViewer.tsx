@@ -11,22 +11,26 @@ pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/b
 interface PDFViewerProps {
   pdfUrl?: string;
   selectedAttribute: Attribute | null;
+  selectedBBox?: Attribute["boundingBox"] | null;
+  currentPdfPage?: number;
   documentTitle: string;
 }
 
-export function PDFViewer({ pdfUrl, selectedAttribute, documentTitle }: PDFViewerProps) {
+export function PDFViewer({ pdfUrl, selectedAttribute, selectedBBox, currentPdfPage = 1, documentTitle }: PDFViewerProps) {
   const [numPages, setNumPages] = useState<number>(0);
-  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [currentPage, setCurrentPage] = useState<number>(currentPdfPage || 1);
   const [scale, setScale] = useState<number>(1.0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [pageWidth, setPageWidth] = useState<number>(0);
+  const [pageHeight, setPageHeight] = useState<number>(0);
 
-  // Navigate to the page containing the selected attribute
+  // Sync currentPage with currentPdfPage prop
   useEffect(() => {
-    if (selectedAttribute?.page) {
-      setCurrentPage(selectedAttribute.page);
+    if (currentPdfPage && currentPdfPage !== currentPage) {
+      setCurrentPage(currentPdfPage);
     }
-  }, [selectedAttribute]);
+  }, [currentPdfPage, currentPage]);
 
   function onDocumentLoadSuccess({ numPages }: { numPages: number }) {
     setNumPages(numPages);
@@ -38,6 +42,16 @@ export function PDFViewer({ pdfUrl, selectedAttribute, documentTitle }: PDFViewe
     console.error("PDF load error:", err);
     setError("Failed to load PDF document");
     setIsLoading(false);
+  }
+
+  // Callback when a page is rendered to get dimensions
+  function onPageRenderSuccess() {
+    // Get page dimensions from the rendered page
+    const pageElement = document.querySelector("[data-page-number]");
+    if (pageElement) {
+      setPageWidth(pageElement.clientWidth);
+      setPageHeight(pageElement.clientHeight);
+    }
   }
 
   const goToPrevPage = () => setCurrentPage((prev) => Math.max(prev - 1, 1));
@@ -146,7 +160,10 @@ export function PDFViewer({ pdfUrl, selectedAttribute, documentTitle }: PDFViewe
       </div>
 
       {/* PDF Viewer */}
-      <div className="flex-1 min-h-[400px] border border-border rounded-xl overflow-auto bg-muted/50 flex justify-center">
+      <div 
+        className="flex-1 min-h-[400px] border border-border rounded-xl overflow-auto bg-muted/50 flex justify-center relative"
+        id="pdf-container"
+      >
         {isLoading && (
           <div className="flex items-center justify-center h-full">
             <div className="animate-pulse text-muted-foreground">Loading PDF...</div>
@@ -162,21 +179,43 @@ export function PDFViewer({ pdfUrl, selectedAttribute, documentTitle }: PDFViewe
           </div>
         )}
 
-        <Document
-          file={pdfUrl}
-          onLoadSuccess={onDocumentLoadSuccess}
-          onLoadError={onDocumentLoadError}
-          loading={null}
-          className="py-4"
-        >
-          <Page
-            pageNumber={currentPage}
-            scale={scale}
-            renderTextLayer={true}
-            renderAnnotationLayer={true}
-            className="shadow-lg"
-          />
-        </Document>
+        <div className="relative inline-block">
+          <Document
+            file={pdfUrl}
+            onLoadSuccess={onDocumentLoadSuccess}
+            onLoadError={onDocumentLoadError}
+            loading={null}
+            className="py-4"
+          >
+            <Page
+              pageNumber={currentPage}
+              scale={scale}
+              renderTextLayer={true}
+              renderAnnotationLayer={true}
+              className="shadow-lg"
+              onRenderSuccess={onPageRenderSuccess}
+            />
+          </Document>
+
+          {/* Bounding Box Highlight Overlay */}
+          {selectedBBox && selectedBBox.page === currentPage && pageWidth > 0 && pageHeight > 0 && (
+            <div
+              className="bbox-highlight bbox-pulse"
+              style={{
+                position: "absolute",
+                left: `${selectedBBox.x * 100}%`,
+                top: `${selectedBBox.y * 100}%`,
+                width: `${selectedBBox.w * 100}%`,
+                height: `${selectedBBox.h * 100}%`,
+                backgroundColor: "rgba(255, 193, 7, 0.3)",
+                border: "2px solid rgba(255, 193, 7, 0.8)",
+                pointerEvents: "none",
+                zIndex: 10,
+              }}
+              title={`${selectedAttribute?.name} - ${selectedAttribute?.category}`}
+            />
+          )}
+        </div>
       </div>
 
       {/* Highlighted Section */}

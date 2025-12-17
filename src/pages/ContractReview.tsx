@@ -36,6 +36,8 @@ export default function ContractReview() {
   const [isSaving, setIsSaving] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [followLatest, setFollowLatest] = useState(true);
+  const [selectedBBox, setSelectedBBox] = useState<Attribute["boundingBox"] | null>(null);
+  const [currentPdfPage, setCurrentPdfPage] = useState<number>(1);
 
 
   useEffect(() => {
@@ -144,6 +146,24 @@ export default function ContractReview() {
   const selectedAttribute = useMemo(() => {
     return attributes.find((attr) => attr.id === selectedAttributeId) || null;
   }, [attributes, selectedAttributeId]);
+
+  // Update bounding box and PDF page when selected attribute changes
+  useEffect(() => {
+    if (selectedAttribute) {
+      // Set bounding box from attribute if available
+      if (selectedAttribute.boundingBox) {
+        setSelectedBBox(selectedAttribute.boundingBox);
+        setCurrentPdfPage(selectedAttribute.boundingBox.page);
+      } else {
+        // Fallback to attribute's page field
+        setSelectedBBox(null);
+        setCurrentPdfPage(selectedAttribute.page || 1);
+      }
+    } else {
+      setSelectedBBox(null);
+      setCurrentPdfPage(1);
+    }
+  }, [selectedAttribute]);
 
   const lowConfidenceCount = useMemo(() => {
     return attributes.filter((attr) => attr.confidenceLevel === "low").length;
@@ -368,7 +388,7 @@ export default function ContractReview() {
       } catch (error) {
         console.warn("[ContractReview] Failed to poll versions", error);
       }
-    }, 10000);
+    }, 1000000);
     
     return () => clearInterval(intervalId);
   }, [id, followLatest, isViewingLatest]);
@@ -390,10 +410,10 @@ export default function ContractReview() {
     return (
       <div className="min-h-screen bg-background">
         <Navbar title="Contract Review" />
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="animate-pulse space-y-4">
-            <div className="h-8 bg-muted rounded w-48" />
-            <div className="h-64 bg-muted rounded-xl" />
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          <div className="animate-pulse space-y-3">
+            <div className="h-6 bg-muted rounded w-48" />
+            <div className="h-64 bg-muted rounded-lg" />
           </div>
         </div>
       </div>
@@ -408,19 +428,19 @@ export default function ContractReview() {
     <div className="min-h-screen bg-background">
       <Navbar title="Contract Review" />
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 animate-fade-in">
         {/* Top Bar */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
           <div>
             <Link
               to="/documents"
-              className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors mb-2"
+              className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-primary transition-colors mb-1.5"
             >
               <ArrowLeftIcon className="w-4 h-4" />
               Back to Documents
             </Link>
-            <h1 className="text-xl font-semibold text-foreground">Contract Review</h1>
-            <p className="text-sm text-muted-foreground">
+            <h1 className="text-xl font-heading font-semibold text-foreground">Contract Review</h1>
+            <p className="text-sm text-muted-foreground leading-tight">
               AI-powered attribute extraction and validation
             </p>
           </div>
@@ -442,11 +462,11 @@ export default function ContractReview() {
         </div>
 
         {/* Main Layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {/* Left Panel: Attributes */}
-          <div className="bg-card rounded-xl card-shadow p-6">
+          <div className="bg-card rounded-lg border border-border shadow-sm p-4">
             <div className="flex items-center justify-between mb-1">
-              <h2 className="text-lg font-semibold text-foreground">
+              <h2 className="text-lg font-heading font-semibold text-foreground">
                 Extracted Attributes
               </h2>
 
@@ -461,7 +481,7 @@ export default function ContractReview() {
                 </button>
 
                 <div className="absolute right-0 mt-1 hidden group-hover:block z-10">
-                  <div className="bg-card rounded-lg card-shadow-lg border border-border overflow-hidden">
+                  <div className="bg-card rounded-lg shadow-md border border-border overflow-hidden">
                     <button
                       onClick={() => handleExportAttributes("csv")}
                       className="w-full px-4 py-2 text-sm text-left hover:bg-muted transition-colors whitespace-nowrap"
@@ -478,12 +498,12 @@ export default function ContractReview() {
                 </div>
               </div>
             </div>
-            <p className="text-sm text-muted-foreground mb-4">
+            <p className="text-sm text-muted-foreground mb-3 leading-tight">
               Review and correct attributes. Low-confidence values are highlighted.
             </p>
 
             {/* Search */}
-            <div className="relative mb-4">
+            <div className="relative mb-3">
               <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
               <input
                 type="text"
@@ -495,7 +515,7 @@ export default function ContractReview() {
             </div>
 
             {/* Attribute List */}
-            <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1">
+            <div className="space-y-2 max-h-[500px] overflow-y-auto pr-1">
               {sortedFilteredAttributes.map((attr) => (
                 <AttributeCard
                   key={attr.id}
@@ -512,13 +532,13 @@ export default function ContractReview() {
             </div>
 
             {/* Actions */}
-            <div className="flex flex-col sm:flex-row gap-3 mt-6 pt-6 border-t border-border">
+            <div className="flex flex-col sm:flex-row gap-2 mt-4 pt-4 border-t border-border">
               <div className="flex-1">
-                <button onClick={handleAcceptAll} className="btn-secondary w-full">
+                <button onClick={handleAcceptAll} className="btn-outline w-full text-sm">
                   Accept Extracted Values for Blank Fields Only
                 </button>
                 {!isViewingLatest && (
-                  <p className="text-xs text-blue-600 dark:text-blue-400 mt-1 text-center italic">
+                  <p className="text-xs text-primary mt-1 text-center italic">
                     Applies to Latest (v{latestVersionNumber})
                   </p>
                 )}
@@ -526,7 +546,7 @@ export default function ContractReview() {
               <button
                 onClick={handleSaveReview}
                 disabled={isSaving}
-                className="btn-primary flex-1 disabled:opacity-50"
+                className="btn-primary flex-1 disabled:opacity-50 text-sm"
               >
                 {isSaving ? "Saving..." : "Save Review"}
               </button>
@@ -537,16 +557,16 @@ export default function ContractReview() {
           <div className="lg:sticky lg:top-8">
             {/* New version available CTA */}
             {!followLatest && latestVersionNumber > (selectedVersionNumber ?? 1) && (
-              <div className="mb-3 p-3 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg flex items-center justify-between">
-                <span className="text-sm text-blue-900 dark:text-blue-100">
-                  New version available (v{latestVersionNumber})
+              <div className="mb-3 p-3 glass rounded-lg flex items-center justify-between shadow-sm border-l-4 border-primary">
+                <span className="text-sm text-foreground font-medium">
+                  🔔 New version available (v{latestVersionNumber})
                 </span>
                 <button
                   onClick={() => {
                     setFollowLatest(true);
                     handleVersionClick(latestVersionNumber);
                   }}
-                  className="text-sm px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
+                  className="text-sm px-3 py-1 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg transition-all shadow-sm hover:shadow-md"
                 >
                   View Latest
                 </button>
@@ -555,7 +575,7 @@ export default function ContractReview() {
             
             {/* Version scroll bar */}
             {versions.length > 0 && (
-              <div className="flex gap-2 overflow-x-auto whitespace-nowrap pb-2 mb-3">
+              <div className="flex gap-1 overflow-x-auto whitespace-nowrap pb-2 mb-2 border-b border-border">
                 {versions.map((v) => {
                   const label = v.versionNumber === latestVersionNumber
                     ? `v${v.versionNumber} – Latest`
@@ -566,10 +586,10 @@ export default function ContractReview() {
                   return (
                     <button
                       key={v.id}
-                      className={`px-3 py-1 rounded text-sm border flex-shrink-0 transition-colors ${
+                      className={`tab-button flex-shrink-0 ${
                         isActive
-                          ? "bg-muted border-border font-medium"
-                          : "bg-card border-border hover:bg-muted"
+                          ? "tab-button-active"
+                          : "tab-button-inactive"
                       }`}
                       onClick={() => handleVersionClick(v.versionNumber)}
                     >
@@ -579,7 +599,7 @@ export default function ContractReview() {
                 })}
               </div>
             )}
-            <div className="mb-2 text-xs text-muted-foreground">
+            <div className="mb-2 text-xs text-muted-foreground leading-tight">
               {activeVersion ? (
                 <span>
                   Version {activeVersion.versionNumber} – {activeVersion.status} – Generated {new Date(activeVersion.createdAt).toLocaleString()}
@@ -597,6 +617,8 @@ export default function ContractReview() {
             <PDFViewer
               pdfUrl={pdfUrl}
               selectedAttribute={selectedAttribute}
+              selectedBBox={selectedBBox}
+              currentPdfPage={currentPdfPage}
               documentTitle={contractDoc.title}
             />
           </div>

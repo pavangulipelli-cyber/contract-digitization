@@ -21,10 +21,10 @@ export function BulkActionBar({
 
   return (
     <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-fade-in">
-      <div className="bg-primary text-primary-foreground rounded-xl card-shadow-lg px-4 py-3 flex items-center gap-4">
+      <div className="bg-primary text-primary-foreground rounded-lg shadow-lg px-4 py-3 flex items-center gap-4 border border-primary/20">
         {/* Selection count */}
         <div className="flex items-center gap-2">
-          <span className="bg-primary-foreground/20 px-2 py-1 rounded text-sm font-medium">
+          <span className="bg-primary-foreground/20 px-2.5 py-1 rounded text-sm font-medium">
             {selectedCount} selected
           </span>
           <button
@@ -43,7 +43,7 @@ export function BulkActionBar({
           <button
             onClick={onBulkReview}
             disabled={isProcessing}
-            className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium bg-primary-foreground/10 hover:bg-primary-foreground/20 rounded-lg transition-colors disabled:opacity-50"
+            className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium bg-primary-foreground/10 hover:bg-primary-foreground/20 rounded-lg transition-all disabled:opacity-50"
           >
             <CheckIcon className="w-4 h-4" />
             Mark Reviewed
@@ -52,7 +52,7 @@ export function BulkActionBar({
           <button
             onClick={onBulkApprove}
             disabled={isProcessing}
-            className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium bg-success text-success-foreground hover:bg-success/90 rounded-lg transition-colors disabled:opacity-50"
+            className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium bg-success text-success-foreground hover:bg-success/90 rounded-lg transition-all shadow-sm disabled:opacity-50"
           >
             <CheckCircleIcon className="w-4 h-4" />
             Approve All
@@ -64,14 +64,14 @@ export function BulkActionBar({
           <div className="relative group">
             <button
               disabled={isProcessing}
-              className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium bg-primary-foreground/10 hover:bg-primary-foreground/20 rounded-lg transition-colors disabled:opacity-50"
+              className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium bg-primary-foreground/10 hover:bg-primary-foreground/20 rounded-lg transition-all disabled:opacity-50"
             >
               <DownloadIcon className="w-4 h-4" />
               Export
             </button>
             
             <div className="absolute bottom-full left-0 mb-2 hidden group-hover:block">
-              <div className="bg-card text-card-foreground rounded-lg card-shadow-lg border border-border overflow-hidden">
+              <div className="bg-card text-card-foreground rounded-lg shadow-md border border-border overflow-hidden">
                 <button
                   onClick={() => onExport("csv")}
                   className="w-full px-4 py-2 text-sm text-left hover:bg-muted transition-colors"

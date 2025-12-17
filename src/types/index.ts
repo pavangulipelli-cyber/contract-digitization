@@ -28,6 +28,14 @@ export interface Attribute {
   extractedValue: string;
   correctedValue: string;
   highlightedText: string;
+  // Bounding box for highlight overlay
+  boundingBox?: {
+    page: number;
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+  };
   // Version-aware fields
   rowId?: string;
   versionId?: string;
