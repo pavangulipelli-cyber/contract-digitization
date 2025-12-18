@@ -12,6 +12,7 @@ import asyncio
 import psycopg2
 import psycopg2.extras
 import uuid
+import csv
 from datetime import date, datetime, time, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
@@ -106,6 +107,25 @@ def _to_storage_url(req: func.HttpRequest, storage_ref: Optional[str]) -> Option
     return f"{scheme}://{host}/{ref}"
 
 
+def _write_csv_rows(folder: str, filename: str, rows: List[Dict[str, Any]], fieldnames: List[str]) -> None:
+    """Write rows to CSV file with UTF-8 encoding."""
+    try:
+        # Ensure directory exists
+        folder_path = Path(folder)
+        folder_path.mkdir(parents=True, exist_ok=True)
+        
+        filepath = folder_path / filename
+        
+        with open(filepath, 'w', newline='', encoding='utf-8') as csvfile:
+            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(rows)
+        
+        logging.info(f"CSV written: {filepath} ({len(rows)} rows)")
+    except Exception as e:
+        logging.error(f"Failed to write CSV {folder}/{filename}: {e}")
+
+
 # ---------------------------------------------------------------------
 # PostgreSQL helpers
 # ---------------------------------------------------------------------
@@ -159,7 +179,7 @@ def _db_execute(sql: str, params: Optional[Tuple[Any, ...]] = None) -> None:
 
 
 def _log_conga_postback(document_id: str, version_id: str, result: Dict[str, Any]) -> None:
-    """Log Conga postback attempt to database."""
+    """Log Conga postback attempt to database and CSV."""
     try:
         conn = _get_conn()
         try:
@@ -167,7 +187,8 @@ def _log_conga_postback(document_id: str, version_id: str, result: Dict[str, Any
                 cur.execute(
                     """INSERT INTO conga_postback_logs 
                        (document_id, version_id, endpoint, payload, status_code, response_body)
-                       VALUES (%s, %s, %s, %s, %s, %s)""",
+                       VALUES (%s, %s, %s, %s, %s, %s)
+                       RETURNING log_id, created_at""",
                     (
                         document_id,
                         version_id,
@@ -177,8 +198,32 @@ def _log_conga_postback(document_id: str, version_id: str, result: Dict[str, Any
                         result.get("response_body")
                     )
                 )
+                log_row = cur.fetchone()
+                log_id = log_row["log_id"] if log_row else None
+                created_at = log_row["created_at"] if log_row else datetime.utcnow()
             conn.commit()
             logging.info(f"Logged Conga postback for {document_id} (status: {result.get('status_code')})")
+            
+            # Write CSV file
+            if log_id:
+                timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+                csv_filename = f"{document_id}__{version_id}__{timestamp}.csv"
+                csv_rows = [{
+                    "log_id": str(log_id),
+                    "document_id": document_id,
+                    "version_id": version_id,
+                    "endpoint": result.get("endpoint", ""),
+                    "payload": json.dumps(result.get("payload", {})),
+                    "status_code": str(result.get("status_code", "")),
+                    "response_body": result.get("response_body", ""),
+                    "created_at": created_at.isoformat() if isinstance(created_at, datetime) else str(created_at),
+                }]
+                _write_csv_rows(
+                    "./logs/conga_postback_logs",
+                    csv_filename,
+                    csv_rows,
+                    ["log_id", "document_id", "version_id", "endpoint", "payload", "status_code", "response_body", "created_at"]
+                )
         except Exception as e:
             conn.rollback()
             logging.error(f"Failed to log Conga postback: {e}")
@@ -627,27 +672,95 @@ async def save_review(req: func.HttpRequest) -> func.HttpResponse:
         conn = _get_conn()
         try:
             with conn.cursor() as cur:
-                # Update corrected_value for each attribute in the latest version
-                # Allow empty values (to clear corrections)
+                # 1. Create review_session record
+                reviewed_at = body.get("reviewedAt")
+                if reviewed_at:
+                    try:
+                        reviewed_at_dt = datetime.fromisoformat(reviewed_at.replace('Z', '+00:00'))
+                    except:
+                        reviewed_at_dt = datetime.utcnow()
+                else:
+                    reviewed_at_dt = datetime.utcnow()
+                
+                status = body.get("status", "COMPLETED")
+                
+                cur.execute(
+                    """INSERT INTO review_sessions 
+                       (document_id, target_version_id, reviewer, status, created_at, updated_at)
+                       VALUES (%s, %s, %s, %s, %s, %s)
+                       RETURNING review_id""",
+                    (document_id, latest_version_id, reviewer_name, status, reviewed_at_dt, reviewed_at_dt)
+                )
+                review_row = cur.fetchone()
+                review_id = review_row["review_id"] if review_row else None
+                logging.info(f"Created review_session: review_id={review_id}")
+                
+                # 2. Update corrected_value for each attribute and log to reviewed_fields
                 update_count = 0
                 updated_keys = []
+                reviewed_fields_rows = []
                 
                 for attr_key, corrected_val in corrections_by_key.items():
-                    # Update even if empty (allows clearing values)
-                    # Handle empty string vs None - both should clear the value
-                    db_value = corrected_val if corrected_val else None
+                    # Get current values from database
                     cur.execute(
-                        """UPDATE extracted_fields
-                           SET corrected_value = %s
-                           WHERE document_id = %s 
-                             AND version_id = %s 
-                             AND attribute_key = %s""",
-                        (db_value, document_id, latest_version_id, attr_key)
+                        """SELECT field_value, corrected_value 
+                           FROM extracted_fields
+                           WHERE document_id = %s AND version_id = %s AND attribute_key = %s""",
+                        (document_id, latest_version_id, attr_key)
                     )
-                    if cur.rowcount > 0:
-                        update_count += 1
-                        updated_keys.append(attr_key)
-                        logging.info(f"Updated {attr_key} in v{latest_version_num}: '{corrected_val}'")
+                    field_row = cur.fetchone()
+                    
+                    if field_row:
+                        original_value = field_row["field_value"]
+                        old_corrected_value = field_row["corrected_value"]
+                        new_corrected_value = corrected_val if corrected_val else None
+                        
+                        # Update extracted_fields
+                        cur.execute(
+                            """UPDATE extracted_fields
+                               SET corrected_value = %s
+                               WHERE document_id = %s 
+                                 AND version_id = %s 
+                                 AND attribute_key = %s""",
+                            (new_corrected_value, document_id, latest_version_id, attr_key)
+                        )
+                        
+                        if cur.rowcount > 0:
+                            update_count += 1
+                            updated_keys.append(attr_key)
+                            logging.info(f"Updated {attr_key} in v{latest_version_num}: '{corrected_val}'")
+                            
+                            # Insert into reviewed_fields
+                            cur.execute(
+                                """INSERT INTO reviewed_fields 
+                                   (review_id, document_id, target_version_id, attribute_key, 
+                                    original_value, corrected_value, old_corrected_value, new_corrected_value,
+                                    approved, reviewed_by, reviewed_at, updated_at)
+                                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                   RETURNING reviewed_field_id""",
+                                (review_id, document_id, latest_version_id, attr_key,
+                                 original_value, new_corrected_value, old_corrected_value, new_corrected_value,
+                                 True, reviewer_name, reviewed_at_dt, reviewed_at_dt)
+                            )
+                            reviewed_field_row = cur.fetchone()
+                            reviewed_field_id = reviewed_field_row["reviewed_field_id"] if reviewed_field_row else None
+                            
+                            # Collect for CSV
+                            reviewed_fields_rows.append({
+                                "reviewed_field_id": str(reviewed_field_id),
+                                "review_id": str(review_id),
+                                "document_id": document_id,
+                                "target_version_id": latest_version_id,
+                                "attribute_key": attr_key,
+                                "original_value": original_value or "",
+                                "corrected_value": new_corrected_value or "",
+                                "old_corrected_value": old_corrected_value or "",
+                                "new_corrected_value": new_corrected_value or "",
+                                "approved": "True",
+                                "reviewed_by": reviewer_name,
+                                "reviewed_at": reviewed_at_dt.isoformat(),
+                                "updated_at": reviewed_at_dt.isoformat(),
+                            })
                     else:
                         logging.warning(f"No row found for {attr_key} in {latest_version_id}")
                 
@@ -659,6 +772,40 @@ async def save_review(req: func.HttpRequest) -> func.HttpResponse:
                        WHERE id = %s""",
                     (reviewer_name, document_id)
                 )
+                
+                conn.commit()
+                logging.info(f"Successfully updated {update_count} attributes in version {latest_version_num}")
+                
+                # Write CSV files for audit trail
+                timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+                
+                # review_sessions CSV
+                review_session_csv = [{
+                    "review_id": str(review_id),
+                    "document_id": document_id,
+                    "target_version_id": latest_version_id,
+                    "reviewer": reviewer_name,
+                    "status": status,
+                    "created_at": reviewed_at_dt.isoformat(),
+                    "updated_at": reviewed_at_dt.isoformat(),
+                }]
+                _write_csv_rows(
+                    "./logs/review_sessions",
+                    f"{document_id}__{review_id}__{timestamp}.csv",
+                    review_session_csv,
+                    ["review_id", "document_id", "target_version_id", "reviewer", "status", "created_at", "updated_at"]
+                )
+                
+                # reviewed_fields CSV
+                if reviewed_fields_rows:
+                    _write_csv_rows(
+                        "./logs/reviewed_fields",
+                        f"{document_id}__{review_id}__{timestamp}.csv",
+                        reviewed_fields_rows,
+                        ["reviewed_field_id", "review_id", "document_id", "target_version_id", "attribute_key",
+                         "original_value", "corrected_value", "old_corrected_value", "new_corrected_value",
+                         "approved", "reviewed_by", "reviewed_at", "updated_at"]
+                    )
                 
                 conn.commit()
                 logging.info(f"Successfully updated {update_count} attributes in version {latest_version_num}")
@@ -711,6 +858,7 @@ async def save_review(req: func.HttpRequest) -> func.HttpResponse:
                 
                 return _json_response({
                     "ok": True,
+                    "reviewId": str(review_id),
                     "versionNumber": latest_version_num,
                     "versionId": latest_version_id,
                     "updatedCount": update_count,

@@ -15,7 +15,7 @@
     "_comment_azure": "Azure PostgreSQL (commented out - uncomment to use)",
     "_DB_HOST": "psql-napd-pricing-contractiq.postgres.database.azure.com",
     "_DB_USER": "psqladmin",
-    
+    "_DB_PASSWORD": "AbpCfnuL?9TCnZzxW?_v7f7eW1RoKY",
  
     "CORS_ALLOW_ORIGIN": "http://localhost:8080",
  

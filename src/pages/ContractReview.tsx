@@ -344,6 +344,7 @@ export default function ContractReview() {
         reviewerName: "unknown",
         status: "Reviewed" as const,
         reviewedAt: new Date().toISOString(),
+        viewedVersionNumber: selectedVersionNumber, // For reporting only
       };
 
       console.log("Payload to be saved (by attributeKey):", payload);
