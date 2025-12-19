@@ -15,8 +15,9 @@ import uuid
 import csv
 from datetime import date, datetime, time, timedelta
 from typing import Any, Dict, List, Optional, Tuple
-from urllib.parse import urlparse
+from urllib.parse import urlparse, quote
 from pathlib import Path
+from azure.storage.blob import BlobServiceClient
 
 # Import Conga client (optional)
 try:
@@ -39,6 +40,10 @@ DB_PASSWORD = os.getenv("DB_PASSWORD", "password")
 AUTO_INIT_DB = os.getenv("AUTO_INIT_DB", "false").lower() in ("1", "true", "yes")
 CONGA_CALL_MODE = os.getenv("CONGA_CALL_MODE", "async").lower()
 CORS_ALLOW_ORIGIN = os.getenv("CORS_ALLOW_ORIGIN", "*")
+
+# Azure Blob Storage Config
+AZURE_STORAGE_CONNECTION_STRING = os.getenv("AZURE_STORAGE_CONNECTION_STRING", "")
+DEFAULT_BLOB_CONTAINER = os.getenv("DEFAULT_BLOB_CONTAINER", "contracts")
 
 _SCHEMA_READY = False
 _SCHEMA_LOCK = asyncio.Lock()
@@ -93,18 +98,60 @@ def _error(status: int, message: str, code: str = "error") -> func.HttpResponse:
     return _json_response({"ok": False, "code": code, "message": message}, status=status)
 
 
+def _normalize_storage_ref(storage_ref: str) -> Tuple[str, str]:
+    """
+    Normalize storage reference to (container, blob_name).
+    
+    Supports 3 formats:
+    A) Full URL: https://<acct>.blob.core.windows.net/contracts/2024/file.pdf
+       -> container="contracts", blob="2024/file.pdf"
+    B) Legacy relative (includes container prefix): contracts/2024/file.pdf
+       -> container="contracts", blob="2024/file.pdf"
+    C) Blob name only: 2024/file.pdf
+       -> container=DEFAULT_BLOB_CONTAINER, blob="2024/file.pdf"
+    """
+    if not storage_ref:
+        logging.debug("[Storage Ref] Empty storage reference")
+        return (DEFAULT_BLOB_CONTAINER, "")
+    
+    # Case A: Full URL
+    if storage_ref.startswith("http://") or storage_ref.startswith("https://"):
+        parsed = urlparse(storage_ref)
+        # Path format: /container/blob/name/with/slashes
+        path_parts = parsed.path.lstrip("/").split("/", 1)
+        if len(path_parts) == 2:
+            logging.info(f"[Storage Ref] Case A (Full URL): {storage_ref} → container={path_parts[0]}, blob={path_parts[1]}")
+            return (path_parts[0], path_parts[1])
+        elif len(path_parts) == 1:
+            logging.info(f"[Storage Ref] Case A (Full URL, single part): {storage_ref} → container={DEFAULT_BLOB_CONTAINER}, blob={path_parts[0]}")
+            return (DEFAULT_BLOB_CONTAINER, path_parts[0])
+        logging.warning(f"[Storage Ref] Case A (Full URL, no path): {storage_ref} → container={DEFAULT_BLOB_CONTAINER}, blob=''")
+        return (DEFAULT_BLOB_CONTAINER, "")
+    
+    # Case B: Legacy relative with container prefix
+    if storage_ref.startswith("contracts/"):
+        blob_name = storage_ref[len("contracts/"):]
+        logging.info(f"[Storage Ref] Case B (Legacy relative): {storage_ref} → container=contracts, blob={blob_name}")
+        return ("contracts", blob_name)
+    
+    # Case C: Blob name only
+    logging.info(f"[Storage Ref] Case C (Blob name only): {storage_ref} → container={DEFAULT_BLOB_CONTAINER}, blob={storage_ref}")
+    return (DEFAULT_BLOB_CONTAINER, storage_ref)
+
+
 def _to_storage_url(req: func.HttpRequest, storage_ref: Optional[str]) -> Optional[str]:
-    """Convert storageRef to full URL."""
+    """Convert storageRef to proxy URL (not direct blob URL)."""
     if not storage_ref:
         return None
-    if storage_ref.startswith("http://") or storage_ref.startswith("https://"):
-        return storage_ref
-    ref = storage_ref.lstrip("/")
     
+    # Build proxy endpoint URL
     parsed = urlparse(req.url)
     scheme = req.headers.get("x-forwarded-proto") or parsed.scheme or "https"
     host = req.headers.get("x-forwarded-host") or req.headers.get("host") or parsed.netloc
-    return f"{scheme}://{host}/{ref}"
+    
+    # URL-encode the storage ref for the query parameter
+    encoded_ref = quote(storage_ref, safe="")
+    return f"{scheme}://{host}/api/pdf?ref={encoded_ref}"
 
 
 def _write_csv_rows(folder: str, filename: str, rows: List[Dict[str, Any]], fieldnames: List[str]) -> None:
@@ -345,6 +392,138 @@ async def health(req: func.HttpRequest) -> func.HttpResponse:
         "dbname": DB_NAME,
         "port": DB_PORT,
     })
+
+
+@app.route(route="api/pdf", methods=["GET", "OPTIONS"])
+async def pdf_proxy(req: func.HttpRequest) -> func.HttpResponse:
+    """
+    Proxy endpoint for serving PDFs from Azure Blob Storage.
+    Supports PDF.js range requests for streaming.
+    
+    Query params:
+      - ref: storage reference (URL-encoded)
+    
+    Headers:
+      - Range: bytes=start-end (optional, for partial content)
+    """
+    if req.method == "OPTIONS":
+        return func.HttpResponse(
+            status_code=200,
+            headers=_with_cors_headers({
+                "Accept-Ranges": "bytes",
+            })
+        )
+    
+    try:
+        # Get storage reference from query params
+        storage_ref = req.params.get("ref")
+        if not storage_ref:
+            return _error(400, "Missing 'ref' parameter", "missing_ref")
+        
+        logging.info(f"[PDF Proxy] ========== PDF REQUEST START ==========")
+        logging.info(f"[PDF Proxy] Incoming storage reference: {storage_ref}")
+        
+        # Check if storage is configured
+        if not AZURE_STORAGE_CONNECTION_STRING:
+            logging.error("[PDF Proxy] Azure Storage connection string not configured")
+            return _error(500, "Azure Storage not configured", "storage_not_configured")
+        
+        # Normalize storage reference
+        container_name, blob_name = _normalize_storage_ref(storage_ref)
+        
+        if not blob_name:
+            logging.error(f"[PDF Proxy] Invalid storage reference - blob_name is empty after normalization")
+            return _error(400, "Invalid storage reference", "invalid_ref")
+        
+        logging.info(f"[PDF Proxy] Normalized → Container: '{container_name}', Blob: '{blob_name}'")
+        
+        # Get blob client
+        blob_service_client = BlobServiceClient.from_connection_string(AZURE_STORAGE_CONNECTION_STRING)
+        blob_client = blob_service_client.get_blob_client(container=container_name, blob=blob_name)
+        
+        # Get blob URL for logging (without SAS token)
+        blob_url = blob_client.url
+        logging.info(f"[PDF Proxy] Blob URL: {blob_url}")
+        
+        # Check if blob exists
+        if not blob_client.exists():
+            logging.warning(f"[PDF Proxy] ❌ Blob NOT FOUND in Azure Storage")
+            logging.warning(f"[PDF Proxy] Container: {container_name}, Blob: {blob_name}")
+            return _error(404, "PDF not found", "pdf_not_found")
+        
+        logging.info(f"[PDF Proxy] ✅ Blob EXISTS in Azure Storage")
+        
+        # Get blob properties for total size
+        blob_properties = blob_client.get_blob_properties()
+        total_size = blob_properties.size
+        
+        logging.info(f"[PDF Proxy] Blob size: {total_size:,} bytes ({total_size / 1024 / 1024:.2f} MB)")
+        
+        # Handle range requests (for PDF.js streaming)
+        range_header = req.headers.get("Range") or req.headers.get("range")
+        
+        if range_header:
+            # Parse range header: "bytes=start-end"
+            range_match = re.match(r"bytes=(\d+)-(\d*)", range_header)
+            if range_match:
+                start = int(range_match.group(1))
+                end = int(range_match.group(2)) if range_match.group(2) else total_size - 1
+                
+                # Ensure valid range
+                if start >= total_size:
+                    logging.warning(f"[PDF Proxy] Invalid range request: start={start} >= total_size={total_size}")
+                    return func.HttpResponse(
+                        status_code=416,
+                        headers=_with_cors_headers({
+                            "Content-Range": f"bytes */{total_size}",
+                        })
+                    )
+                
+                end = min(end, total_size - 1)
+                length = end - start + 1
+                
+                logging.info(f"[PDF Proxy] 📥 Range request: bytes {start}-{end}/{total_size} (length={length:,} bytes)")
+                
+                # Download specific range
+                stream = blob_client.download_blob(offset=start, length=length)
+                blob_data = stream.readall()
+                
+                logging.info(f"[PDF Proxy] ✅ Successfully downloaded range from Azure Blob Storage")
+                logging.info(f"[PDF Proxy] ========== PDF REQUEST END (206 Partial Content) ==========")
+                
+                return func.HttpResponse(
+                    body=blob_data,
+                    status_code=206,
+                    mimetype="application/pdf",
+                    headers=_with_cors_headers({
+                        "Content-Range": f"bytes {start}-{end}/{total_size}",
+                        "Accept-Ranges": "bytes",
+                        "Content-Length": str(length),
+                    })
+                )
+        
+        # Full download (no range)
+        logging.info(f"[PDF Proxy] 📥 Full download requested (no range header)")
+        stream = blob_client.download_blob()
+        blob_data = stream.readall()
+        
+        logging.info(f"[PDF Proxy] ✅ Successfully downloaded complete file from Azure Blob Storage")
+        logging.info(f"[PDF Proxy] ========== PDF REQUEST END (200 OK) ==========")
+        
+        return func.HttpResponse(
+            body=blob_data,
+            status_code=200,
+            mimetype="application/pdf",
+            headers=_with_cors_headers({
+                "Accept-Ranges": "bytes",
+                "Content-Length": str(total_size),
+            })
+        )
+        
+    except Exception as e:
+        logging.error(f"[PDF Proxy] ❌ ERROR: {e}", exc_info=True)
+        logging.error(f"[PDF Proxy] ========== PDF REQUEST END (Error) ==========")
+        return _error(500, f"Failed to fetch PDF: {str(e)}", "pdf_fetch_error")
 
 
 @app.route(route="api/documents", methods=["GET", "OPTIONS"])

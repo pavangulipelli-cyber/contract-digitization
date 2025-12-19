@@ -317,17 +317,5 @@ export async function exportAttributes(
   return new Blob([csvContent], { type: "text/csv" });
 }
 
-// PDF URL helper (for Azure Blob Storage integration)
-export function getPdfUrl(storageRef?: string): string | undefined {
-  if (!storageRef) return undefined;
-  
-  const storageBaseUrl = import.meta.env.VITE_STORAGE_BASE_URL;
-  if (storageBaseUrl) {
-    return `${storageBaseUrl}/${storageRef}`;
-  }
-  
-  // Fallback: Map storageRef to local PDF files in public folder
-  // Expected format: "doc-001_Service_Agreement_Acme_Corp_pdf.pdf"
-  console.info("[getPdfUrl] Using local PDF", { storageRef });
-  return `/${storageRef}`;
-}
+// Note: PDFs are now served via backend proxy at /api/pdf
+// The backend provides storageUrl in API responses - use that directly.

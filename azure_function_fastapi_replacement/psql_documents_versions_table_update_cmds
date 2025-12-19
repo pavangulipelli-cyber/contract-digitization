@@ -1,0 +1,82 @@
+UPDATE document_versions SET storageref='https://sanapdpricingcontractiq.blob.core.windows.net/raw-contracts/C-2024-001.pdf'
+WHERE storageref='contracts/2024/acme-service-agreement.pdf';
+
+UPDATE document_versions SET storageref='https://sanapdpricingcontractiq.blob.core.windows.net/raw-contracts/C-2024-002.pdf'
+WHERE storageref='contracts/2024/acme-service-agreement_v2.pdf';
+
+UPDATE document_versions SET storageref='https://sanapdpricingcontractiq.blob.core.windows.net/raw-contracts/C-2024-003.pdf'
+WHERE storageref='contracts/2024/acme-service-agreement_v3.pdf';
+
+UPDATE document_versions SET storageref='https://sanapdpricingcontractiq.blob.core.windows.net/raw-contracts/C-2024-004.pdf'
+WHERE storageref='contracts/2024/acme-service-agreement_v4.pdf';
+
+UPDATE document_versions SET storageref='https://sanapdpricingcontractiq.blob.core.windows.net/raw-contracts/C-2024-005.pdf'
+WHERE storageref='contracts/2024/acme-service-agreement_v5.pdf';
+
+UPDATE document_versions SET storageref='https://sanapdpricingcontractiq.blob.core.windows.net/raw-contracts/C-2024-006.pdf'
+WHERE storageref='contracts/2024/acme-service-agreement_v6.pdf';
+
+UPDATE document_versions SET storageref='https://sanapdpricingcontractiq.blob.core.windows.net/raw-contracts/C-2024-007.pdf'
+WHERE storageref='contracts/2024/acme-service-agreement_v7.pdf';
+
+UPDATE document_versions SET storageref='https://sanapdpricingcontractiq.blob.core.windows.net/raw-contracts/C-2024-008.pdf'
+WHERE storageref='contracts/2024/acme-service-agreement_v8.pdf';
+
+UPDATE document_versions SET storageref='https://sanapdpricingcontractiq.blob.core.windows.net/raw-contracts/C-2024-009.pdf'
+WHERE storageref='contracts/2024/acme-service-agreement_v9.pdf';
+
+UPDATE document_versions SET storageref='https://sanapdpricingcontractiq.blob.core.windows.net/raw-contracts/C-2024-010.pdf'
+WHERE storageref='contracts/2024/acme-service-agreement_v10.pdf';
+
+UPDATE document_versions SET storageref='https://sanapdpricingcontractiq.blob.core.windows.net/raw-contracts/C-2024-011.pdf'
+WHERE storageref='contracts/2024/acme-service-agreement_v11.pdf';
+
+UPDATE document_versions SET storageref='https://sanapdpricingcontractiq.blob.core.windows.net/raw-contracts/C-2024-012.pdf'
+WHERE storageref='contracts/2024/acme-service-agreement_v12.pdf';
+
+UPDATE document_versions SET storageref='https://sanapdpricingcontractiq.blob.core.windows.net/raw-contracts/C-2024-013.pdf'
+WHERE storageref='contracts/2024/acme-service-agreement_v13.pdf';
+
+DataFlow Software License (C-2024-014 … C-2024-016)
+UPDATE document_versions SET storageref='https://sanapdpricingcontractiq.blob.core.windows.net/raw-contracts/C-2024-014.pdf'
+WHERE storageref='contracts/2024/dataflow-license.pdf';
+
+UPDATE document_versions SET storageref='https://sanapdpricingcontractiq.blob.core.windows.net/raw-contracts/C-2024-015.pdf'
+WHERE storageref='contracts/2024/dataflow-license_v2.pdf';
+
+UPDATE document_versions SET storageref='https://sanapdpricingcontractiq.blob.core.windows.net/raw-contracts/C-2024-016.pdf'
+WHERE storageref='contracts/2024/dataflow-license_v3.pdf';
+
+
+GlobalTech MSA (C-2024-017 … C-2024-019)
+UPDATE document_versions SET storageref='https://sanapdpricingcontractiq.blob.core.windows.net/raw-contracts/C-2024-017.pdf'
+WHERE storageref='contracts/2024/globaltech-msa.pdf';
+
+UPDATE document_versions SET storageref='https://sanapdpricingcontractiq.blob.core.windows.net/raw-contracts/C-2024-018.pdf'
+WHERE storageref='contracts/2024/globaltech-msa_v2.pdf';
+
+UPDATE document_versions SET storageref='https://sanapdpricingcontractiq.blob.core.windows.net/raw-contracts/C-2024-019.pdf'
+WHERE storageref='contracts/2024/globaltech-msa_v3.pdf';
+
+Innovation Consulting (C-2024-020 … C-2024-022)
+
+UPDATE document_versions SET storageref='https://sanapdpricingcontractiq.blob.core.windows.net/raw-contracts/C-2024-020.pdf'
+WHERE storageref='contracts/2024/innovation-consulting.pdf';
+
+UPDATE document_versions SET storageref='https://sanapdpricingcontractiq.blob.core.windows.net/raw-contracts/C-2024-021.pdf'
+WHERE storageref='contracts/2024/innovation-consulting_v2.pdf';
+
+UPDATE document_versions SET storageref='https://sanapdpricingcontractiq.blob.core.windows.net/raw-contracts/C-2024-022.pdf'
+WHERE storageref='contracts/2024/innovation-consulting_v3.pdf';
+
+TechStart NDA (C-2024-023 … C-2024-025)
+
+UPDATE document_versions SET storageref='https://sanapdpricingcontractiq.blob.core.windows.net/raw-contracts/C-2024-023.pdf'
+WHERE storageref='contracts/2024/techstart-nda.pdf';
+
+UPDATE document_versions SET storageref='https://sanapdpricingcontractiq.blob.core.windows.net/raw-contracts/C-2024-024.pdf'
+WHERE storageref='contracts/2024/techstart-nda_v2.pdf';
+
+UPDATE document_versions SET storageref='https://sanapdpricingcontractiq.blob.core.windows.net/raw-contracts/C-2024-025.pdf'
+WHERE storageref='contracts/2024/techstart-nda_v3.pdf';
+

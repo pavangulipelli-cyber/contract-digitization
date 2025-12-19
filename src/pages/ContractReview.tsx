@@ -15,7 +15,6 @@ import {
   getAttributesByDocumentId,
   saveReview,
   exportAttributes,
-  getPdfUrl,
 } from "@/api";
 import { Document, Attribute, DocumentVersion } from "@/types";
 import { toast } from "@/hooks/use-toast";
@@ -454,8 +453,27 @@ export default function ContractReview() {
     }
   }, [selectedAttributeId, selectedAttributeKey]);
 
-  // Get PDF URL from active version
-  const pdfUrl = activeVersion?.storageUrl || (activeVersion?.storageRef ? getPdfUrl(activeVersion.storageRef) : undefined);
+  // Get PDF URL from active version (backend provides proxy URL)
+  const pdfUrl = activeVersion?.storageUrl;
+
+  // Log PDF URL information for debugging
+  useEffect(() => {
+    if (activeVersion) {
+      console.info("[PDF Viewer] ========== PDF URL INFO ==========");
+      console.info("[PDF Viewer] Storage Ref (from DB):", activeVersion.storageRef);
+      console.info("[PDF Viewer] Storage URL (proxy endpoint):", activeVersion.storageUrl);
+      console.info("[PDF Viewer] Version Number:", activeVersion.versionNumber);
+      console.info("[PDF Viewer] Version Status:", activeVersion.status);
+      
+      if (pdfUrl) {
+        console.info("[PDF Viewer] ✅ PDF will be loaded from Azure Blob Storage via proxy");
+        console.info("[PDF Viewer] Full URL:", pdfUrl);
+      } else {
+        console.warn("[PDF Viewer] ⚠️ No PDF URL available");
+      }
+      console.info("[PDF Viewer] ==========================================");
+    }
+  }, [activeVersion, pdfUrl]);
 
   if (isLoading) {
     return (

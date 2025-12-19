@@ -1,0 +1,38 @@
+A) documents table (latest versions only)
+
+These match what your documents.storageref typically stores (v13 / v3 etc).
+
+UPDATE documents
+SET storageref = 'https://sanapdpricingcontractiq.blob.core.windows.net/raw-contracts/C-2024-013.pdf'
+WHERE storageref IN (
+  'contracts/2024/acme-service-agreement_v13.pdf',
+  'https://contractiq.blob.core.windows.net/contracts/2024/acme-service-agreement_v13.pdf'
+);
+
+UPDATE documents
+SET storageref = 'https://sanapdpricingcontractiq.blob.core.windows.net/raw-contracts/C-2024-016.pdf'
+WHERE storageref IN (
+  'contracts/2024/dataflow-license_v3.pdf',
+  'https://contractiq.blob.core.windows.net/contracts/2024/dataflow-license_v3.pdf'
+);
+
+UPDATE documents
+SET storageref = 'https://sanapdpricingcontractiq.blob.core.windows.net/raw-contracts/C-2024-019.pdf'
+WHERE storageref IN (
+  'contracts/2024/globaltech-msa_v3.pdf',
+  'https://contractiq.blob.core.windows.net/contracts/2024/globaltech-msa_v3.pdf'
+);
+
+UPDATE documents
+SET storageref = 'https://sanapdpricingcontractiq.blob.core.windows.net/raw-contracts/C-2024-022.pdf'
+WHERE storageref IN (
+  'contracts/2024/innovation-consulting_v3.pdf',
+  'https://contractiq.blob.core.windows.net/contracts/2024/innovation-consulting_v3.pdf'
+);
+
+UPDATE documents
+SET storageref = 'https://sanapdpricingcontractiq.blob.core.windows.net/raw-contracts/C-2024-025.pdf'
+WHERE storageref IN (
+  'contracts/2024/techstart-nda_v3.pdf',
+  'https://contractiq.blob.core.windows.net/contracts/2024/techstart-nda_v3.pdf'
+);

@@ -35,6 +35,7 @@ lerna-debug.log*
 .env.test.local
 .env.production.local
 *.local
+local.settings.json
 
 # IDE and Editor files
 .vscode/*
