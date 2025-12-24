@@ -1,0 +1,143 @@
+Contract AI - Versioning UI Test Scripts (SQLite + PDFs)
+====================================================
+
+Purpose
+-------
+Test two UI behaviors for Contract Review:
+1) Versions bar becomes horizontally scrollable when many versions exist.
+2) "Latest" updates when a new version is inserted.
+
+This guide uses ONE document: doc-001.
+
+Prerequisites
+-------------
+- sqlite3 installed
+- DB file: contract_ai_versioned.db
+- PDFs under: public/contracts/2024/
+
+Note: `.headers on` and `.mode column` only change how sqlite3 prints results.
+
+A) Open DB + readable output
+----------------------------
+sqlite3 .\contract_ai_versioned.db
+.headers on
+.mode column
+
+B) Inspect versions
+-------------------
+SELECT id, versionNumber, isLatest, storageRef
+FROM document_versions
+WHERE documentId='doc-001'
+ORDER BY versionNumber;
+
+C) Create v4..v12 + copy attributes from v3
+-------------------------------------------
+BEGIN;
+
+WITH new_versions(id, documentId, versionNumber, isLatest, createdAt, createdBy, status, storageRef, notes) AS (
+  VALUES
+  ('doc-001-v4','doc-001',4,0,datetime('now'),'system','Reviewed','contracts/2024/acme-service-agreement_v3.pdf','Demo version'),
+  ('doc-001-v5','doc-001',5,0,datetime('now'),'system','Reviewed','contracts/2024/acme-service-agreement_v3.pdf','Demo version'),
+  ('doc-001-v6','doc-001',6,0,datetime('now'),'system','Reviewed','contracts/2024/acme-service-agreement_v3.pdf','Demo version'),
+  ('doc-001-v7','doc-001',7,0,datetime('now'),'system','Reviewed','contracts/2024/acme-service-agreement_v3.pdf','Demo version'),
+  ('doc-001-v8','doc-001',8,0,datetime('now'),'system','Reviewed','contracts/2024/acme-service-agreement_v3.pdf','Demo version'),
+  ('doc-001-v9','doc-001',9,0,datetime('now'),'system','Reviewed','contracts/2024/acme-service-agreement_v3.pdf','Demo version'),
+  ('doc-001-v10','doc-001',10,0,datetime('now'),'system','Reviewed','contracts/2024/acme-service-agreement_v3.pdf','Demo version'),
+  ('doc-001-v11','doc-001',11,0,datetime('now'),'system','Reviewed','contracts/2024/acme-service-agreement_v3.pdf','Demo version'),
+  ('doc-001-v12','doc-001',12,0,datetime('now'),'system','Reviewed','contracts/2024/acme-service-agreement_v3.pdf','Demo version')
+)
+INSERT OR IGNORE INTO document_versions (id, documentId, versionNumber, isLatest, createdAt, createdBy, status, storageRef, notes)
+SELECT * FROM new_versions;
+
+WITH target_versions(versionId) AS (
+  VALUES
+  ('doc-001-v4'),('doc-001-v5'),('doc-001-v6'),('doc-001-v7'),('doc-001-v8'),
+  ('doc-001-v9'),('doc-001-v10'),('doc-001-v11'),('doc-001-v12')
+)
+INSERT OR IGNORE INTO attributes
+(id, documentId, name, category, section, page, confidenceScore, confidenceLevel, extractedValue, correctedValue, highlightedText, versionId, attributeKey)
+SELECT
+  a.attributeKey || '--' || tv.versionId,
+  a.documentId, a.name, a.category, a.section,
+  1,
+  a.confidenceScore, a.confidenceLevel, a.extractedValue, a.correctedValue, a.highlightedText,
+  tv.versionId,
+  a.attributeKey
+FROM attributes a
+JOIN target_versions tv
+WHERE a.documentId='doc-001' AND a.versionId='doc-001-v3';
+
+UPDATE document_versions
+SET isLatest = CASE WHEN versionNumber=12 THEN 1 ELSE 0 END
+WHERE documentId='doc-001';
+
+UPDATE documents
+SET currentVersionId='doc-001-v12',
+    currentVersionNumber=12,
+    storageRef=(SELECT storageRef FROM document_versions WHERE id='doc-001-v12')
+WHERE id='doc-001';
+
+COMMIT;
+
+D) Verify
+---------
+SELECT id, currentVersionNumber, currentVersionId, storageRef
+FROM documents
+WHERE id='doc-001';
+
+SELECT versionNumber, isLatest
+FROM document_versions
+WHERE documentId='doc-001'
+ORDER BY versionNumber DESC;
+
+SELECT COUNT(*) AS attr_count
+FROM attributes
+WHERE documentId='doc-001' AND versionId='doc-001-v12';
+
+Refresh UI for doc-001 -> versions row should now be scrollable.
+
+E) Add v13 and mark latest
+--------------------------
+BEGIN;
+
+INSERT OR IGNORE INTO document_versions
+(id, documentId, versionNumber, isLatest, createdAt, createdBy, status, storageRef, notes)
+VALUES
+('doc-001-v13','doc-001',13,0,datetime('now'),'system','Reviewed','contracts/2024/acme-service-agreement_v3.pdf','New version test');
+
+INSERT OR IGNORE INTO attributes
+(id, documentId, name, category, section, page, confidenceScore, confidenceLevel, extractedValue, correctedValue, highlightedText, versionId, attributeKey)
+SELECT
+  a.attributeKey || '--doc-001-v13',
+  a.documentId, a.name, a.category, a.section,
+  1,
+  a.confidenceScore, a.confidenceLevel, a.extractedValue, a.correctedValue, a.highlightedText,
+  'doc-001-v13',
+  a.attributeKey
+FROM attributes a
+WHERE a.documentId='doc-001' AND a.versionId='doc-001-v12';
+
+UPDATE document_versions
+SET isLatest = CASE WHEN versionNumber=13 THEN 1 ELSE 0 END
+WHERE documentId='doc-001';
+
+UPDATE documents
+SET currentVersionId='doc-001-v13',
+    currentVersionNumber=13,
+    storageRef=(SELECT storageRef FROM document_versions WHERE id='doc-001-v13')
+WHERE id='doc-001';
+
+COMMIT;
+
+F) OPTIONAL: Make PDF copies for v4..v13 (PowerShell)
+-----------------------------------------------------
+Run inside public\contracts\2024
+
+Create:
+4..13 | ForEach-Object { Copy-Item ".\acme-service-agreement_v3.pdf" ".\acme-service-agreement_v$_.pdf" -Force }
+
+Undo:
+4..13 | ForEach-Object { Remove-Item ".\acme-service-agreement_v$_.pdf" -Force }
+
+Quit sqlite3:
+.quit

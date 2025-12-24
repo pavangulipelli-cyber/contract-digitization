@@ -1,0 +1,190 @@
+================================================================================
+SQLite → PostgreSQL Migration Guide (Updated for contract_ai_schema_postgres.sql)
+Contract Digitization Backend
+================================================================================
+
+What this guide is for
+----------------------
+Migrate the backend database from SQLite (contract_ai_versioned.db) to PostgreSQL
+using the merged schema file:
+
+  contract_ai_schema_postgres.sql
+
+This schema includes:
+- Versioning tables: documents, document_versions, attributes, attribute_reviews
+- OCR/Review tables from pg_sql_schema.sql: ocr_jobs, extracted_fields, tables_extracted,
+  review_sessions, reviewed_fields, conga_postback_logs
+
+Important note about column names (PostgreSQL)
+----------------------------------------------
+PostgreSQL LOWERCASES unquoted identifiers. If your schema has columns like uploadedAt,
+Postgres will store them as "uploadedat" unless you CREATE TABLE with quoted names.
+
+Your provided contract_ai_schema_postgres.sql uses unquoted identifiers, so in Postgres:
+- uploadedAt becomes uploadedat
+- attributeCount becomes attributecount
+- currentVersionNumber becomes currentversionnumber
+etc.
+
+This is OK as long as your backend queries use the actual Postgres column names.
+If you want to preserve camelCase, update the schema to use double quotes around
+mixed-case columns (example: "uploadedAt").
+
+================================================================================
+1) Prerequisites
+================================================================================
+
+Install PostgreSQL
+- Default port: 5432
+- Ensure you can run: psql --version
+
+Have the schema file ready
+- contract_ai_schema_postgres.sql (the merged schema)
+
+(Optional) Tools
+- pgloader (simplifies full DB migration)
+- DBeaver / pgAdmin for visual inspection
+
+================================================================================
+2) Create database + user (psql)
+================================================================================
+
+Open psql:
+  psql -U postgres
+
+Run:
+  CREATE DATABASE contract_ai_postgres_db;
+
+  -- Optional app user
+  CREATE USER contract_app WITH PASSWORD 'your_secure_password';
+  GRANT ALL PRIVILEGES ON DATABASE contract_ai_postgres_db TO contract_app;
+
+Connect:
+  \c contract_ai_postgres_db
+
+Exit:
+  \q
+
+================================================================================
+3) Create tables in Postgres (apply schema)
+================================================================================
+
+From PowerShell / CMD (run from the folder containing the schema file):
+
+  psql -U postgres -d contract_ai_postgres_db -f .\contract_ai_schema_postgres.sql
+
+Verify tables:
+  psql -U postgres -d contract_ai_postgres_db -c "\dt"
+
+You should see:
+  documents, document_versions, attributes, attribute_reviews, ocr_jobs, extracted_fields,
+  tables_extracted, review_sessions, reviewed_fields, conga_postback_logs
+
+================================================================================
+4) Export data from SQLite (CSV recommended)
+================================================================================
+
+From your SQLite folder:
+
+  sqlite3 contract_ai_versioned.db
+
+Inside sqlite3:
+  .headers on
+  .mode csv
+
+  .output documents.csv
+  SELECT * FROM documents;
+
+  .output document_versions.csv
+  SELECT * FROM document_versions;
+
+  .output attributes.csv
+  SELECT * FROM attributes;
+
+  .output attribute_reviews.csv
+  SELECT * FROM attribute_reviews;
+
+  .output stdout
+  .quit
+
+Notes:
+- SQLite may have fewer tables than Postgres (OCR tables may not exist in SQLite).
+  That is fine; those Postgres tables can start empty.
+
+================================================================================
+5) Import CSV into PostgreSQL
+================================================================================
+
+Enter psql:
+  psql -U postgres -d contract_ai_postgres_db
+
+Recommended: Use \copy (client-side file read)
+
+  \copy documents FROM 'documents.csv' DELIMITER ',' CSV HEADER;
+  \copy document_versions FROM 'document_versions.csv' DELIMITER ',' CSV HEADER;
+  \copy attributes FROM 'attributes.csv' DELIMITER ',' CSV HEADER;
+  \copy attribute_reviews FROM 'attribute_reviews.csv' DELIMITER ',' CSV HEADER;
+
+Exit:
+  \q
+
+Common import issues:
+- Date/time formats: If a SQLite text date fails to parse into TIMESTAMPTZ, import as text
+  first or transform your CSV.
+- Booleans: SQLite may export 0/1. Postgres BOOLEAN expects true/false.
+  Fix with a staging column or transform CSV before import.
+
+================================================================================
+6) Validate migration
+================================================================================
+
+Counts:
+  psql -U postgres -d contract_ai_postgres_db -c "SELECT COUNT(*) AS documents FROM documents;"
+  psql -U postgres -d contract_ai_postgres_db -c "SELECT COUNT(*) AS versions FROM document_versions;"
+  psql -U postgres -d contract_ai_postgres_db -c "SELECT COUNT(*) AS attributes FROM attributes;"
+  psql -U postgres -d contract_ai_postgres_db -c "SELECT COUNT(*) AS reviews FROM attribute_reviews;"
+
+Check latest versions:
+  psql -U postgres -d contract_ai_postgres_db -c "SELECT documentid, versionnumber FROM document_versions WHERE islatest = true;"
+
+Foreign key sanity:
+  psql -U postgres -d contract_ai_postgres_db -c "SELECT COUNT(*) FROM attributes a LEFT JOIN document_versions v ON a.versionid=v.id WHERE v.id IS NULL;"
+
+================================================================================
+7) Update backend to use Postgres
+================================================================================
+
+FastAPI (recommended approach)
+------------------------------
+Use psycopg2 or asyncpg. Minimal psycopg2 example:
+- Replace sqlite3 connection with psycopg2 connect()
+- Replace SQLite placeholders (?) with Postgres placeholders (%s)
+
+Environment variables (example):
+  DB_HOST=localhost
+  DB_PORT=5432
+  DB_NAME=contract_ai_postgres_db
+  DB_USER=postgres
+  DB_PASSWORD=password
+
+If you previously had SQLite auto-seeding:
+- Replace it with applying Postgres schema file once (Step 3).
+- Optionally implement startup check using information_schema.tables and run schema if missing.
+
+Node/Express (if you keep Node)
+-------------------------------
+Use the 'pg' package and update queries to $1, $2 placeholders.
+
+================================================================================
+8) Rollback / backup plan
+================================================================================
+
+Before migration, keep a copy:
+  Copy-Item .\contract_ai_versioned.db .\contract_ai_versioned.db.backup -Force
+
+If needed, restore:
+  Copy-Item .\contract_ai_versioned.db.backup .\contract_ai_versioned.db -Force
+
+================================================================================
+END
+================================================================================

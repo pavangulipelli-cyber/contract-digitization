@@ -1,0 +1,78 @@
+# Dependencies
+node_modules/
+jspm_packages/
+
+# Python virtual environments
+venv/
+venv*/
+env/
+ENV/
+.venv/
+.env/
+
+# Build outputs
+dist/
+dist-ssr/
+build/
+out/
+.next/
+.nuxt/
+.cache/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.local
+local.settings.json
+
+# IDE and Editor files
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+*~
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Testing
+coverage/
+.nyc_output/
+*.lcov
+
+# TypeScript
+*.tsbuildinfo
+
+# Temporary files
+*.tmp
+*.temp
+.temp/
+.tmp/
+
+# Misc
+.eslintcache
+.stylelintcache
+
+# Lock files (optional - uncomment if needed)
+# bun.lockb
+# package-lock.json
+# yarn.lock
